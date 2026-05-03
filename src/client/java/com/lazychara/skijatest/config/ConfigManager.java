@@ -9,6 +9,7 @@ import com.lazychara.skijatest.module.BooleanSetting;
 import com.lazychara.skijatest.module.Module;
 import com.lazychara.skijatest.module.ModuleManager;
 import com.lazychara.skijatest.module.Setting;
+import com.lazychara.skijatest.module.render.HUD;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.File;
@@ -22,18 +23,28 @@ public class ConfigManager {
     public static void save() {
         try {
             JsonObject root = new JsonObject();
-            
+
             JsonObject ui = new JsonObject();
             ui.addProperty("cR", SkijaTestScreen.cR);
             ui.addProperty("cG", SkijaTestScreen.cG);
             ui.addProperty("cB", SkijaTestScreen.cB);
             root.add("ui", ui);
-            
+
             JsonObject modulesObj = new JsonObject();
             for (Module mod : ModuleManager.modules) {
                 JsonObject mObj = new JsonObject();
                 mObj.addProperty("enabled", mod.enabled);
                 mObj.addProperty("keybind", mod.keybind);
+                if (mod instanceof HUD hud) {
+                    JsonObject posObj = new JsonObject();
+                    posObj.addProperty("mainX", hud.mainX);
+                    posObj.addProperty("mainY", hud.mainY);
+                    posObj.addProperty("xyzX", hud.xyzX);
+                    posObj.addProperty("xyzY", hud.xyzY);
+                    posObj.addProperty("potionsX", hud.potionsX);
+                    posObj.addProperty("potionsY", hud.potionsY);
+                    mObj.add("positions", posObj);
+                }
                 JsonObject settingsObj = new JsonObject();
                 for (Setting s : mod.settings) {
                     if (s instanceof BooleanSetting) {
@@ -71,6 +82,15 @@ public class ConfigManager {
                         JsonObject mObj = modulesObj.getAsJsonObject(mod.name);
                         if (mObj.has("enabled")) mod.enabled = mObj.get("enabled").getAsBoolean();
                         if (mObj.has("keybind")) mod.keybind = mObj.get("keybind").getAsInt();
+                        if (mod instanceof HUD hud && mObj.has("positions")) {
+                            JsonObject posObj = mObj.getAsJsonObject("positions");
+                            if (posObj.has("mainX")) hud.mainX = posObj.get("mainX").getAsInt();
+                            if (posObj.has("mainY")) hud.mainY = posObj.get("mainY").getAsInt();
+                            if (posObj.has("xyzX")) hud.xyzX = posObj.get("xyzX").getAsInt();
+                            if (posObj.has("xyzY")) hud.xyzY = posObj.get("xyzY").getAsInt();
+                            if (posObj.has("potionsX")) hud.potionsX = posObj.get("potionsX").getAsInt();
+                            if (posObj.has("potionsY")) hud.potionsY = posObj.get("potionsY").getAsInt();
+                        }
                         if (mObj.has("settings")) {
                             JsonObject settingsObj = mObj.getAsJsonObject("settings");
                             for (Setting s : mod.settings) {

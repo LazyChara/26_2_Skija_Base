@@ -200,14 +200,14 @@ public class SkijaTestScreen extends Screen {
         panelR.drawText("Color", ox + PAD, y, curTf, 10f, W50);
         y += 14;
         float sx = ox + PAD, sw = iw - 32;
-        drawSlider(panelR, sx, y, sw, cR, 0xFFFF4444, "R");
-        panelR.drawText(String.valueOf(cR), sx + sw + 6, y + 2, curTf, 9f, 0xFFFF4444);
+        drawSlider(panelR, sx, y, sw, cR, 0xFF4444FF, "R");
+        panelR.drawText(String.valueOf(cR), sx + sw + 6, y + 2, curTf, 9f, 0xFF4444FF);
         y += 20;
         drawSlider(panelR, sx, y, sw, cG, 0xFF44FF44, "G");
         panelR.drawText(String.valueOf(cG), sx + sw + 6, y + 2, curTf, 9f, 0xFF44FF44);
         y += 20;
-        drawSlider(panelR, sx, y, sw, cB, 0xFF4444FF, "B");
-        panelR.drawText(String.valueOf(cB), sx + sw + 6, y + 2, curTf, 9f, 0xFF4444FF);
+        drawSlider(panelR, sx, y, sw, cB, 0xFFFF4444, "B");
+        panelR.drawText(String.valueOf(cB), sx + sw + 6, y + 2, curTf, 9f, 0xFFFF4444);
         y += 20;
         panelR.drawRoundedRect(ox + PAD, y, iw, .5f, .25f, SEP);
         y += 8;
