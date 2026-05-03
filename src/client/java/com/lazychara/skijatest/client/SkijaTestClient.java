@@ -27,6 +27,7 @@ public class SkijaTestClient implements ClientModInitializer {
 
         ModuleManager.init();
         com.lazychara.skijatest.config.ConfigManager.load();
+        HudManager.init();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (OPEN_GUI_KEY.consumeClick()) {

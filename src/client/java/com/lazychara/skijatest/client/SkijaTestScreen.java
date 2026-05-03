@@ -27,7 +27,7 @@ public class SkijaTestScreen extends Screen {
     private static String[] fonts;
     private static java.util.LinkedHashMap<String, Typeface> bundled;
     private static int selIdx = 0;
-    private static Typeface curTf;
+    public static Typeface curTf;
     private int guiScale = 1;
     public static int cR = 255, cG = 255, cB = 255;
     private int dragSlider = -1;
@@ -203,11 +203,11 @@ public class SkijaTestScreen extends Screen {
         drawSlider(panelR, sx, y, sw, cR, 0xFFFF4444, "R");
         panelR.drawText(String.valueOf(cR), sx + sw + 6, y + 2, curTf, 9f, 0xFFFF4444);
         y += 20;
-        drawSlider(panelR, sx, y, sw, cG, 0xFF44DD44, "G");
-        panelR.drawText(String.valueOf(cG), sx + sw + 6, y + 2, curTf, 9f, 0xFF44DD44);
+        drawSlider(panelR, sx, y, sw, cG, 0xFF44FF44, "G");
+        panelR.drawText(String.valueOf(cG), sx + sw + 6, y + 2, curTf, 9f, 0xFF44FF44);
         y += 20;
-        drawSlider(panelR, sx, y, sw, cB, 0xFF4488FF, "B");
-        panelR.drawText(String.valueOf(cB), sx + sw + 6, y + 2, curTf, 9f, 0xFF4488FF);
+        drawSlider(panelR, sx, y, sw, cB, 0xFF4444FF, "B");
+        panelR.drawText(String.valueOf(cB), sx + sw + 6, y + 2, curTf, 9f, 0xFF4444FF);
         y += 20;
         panelR.drawRoundedRect(ox + PAD, y, iw, .5f, .25f, SEP);
         y += 8;

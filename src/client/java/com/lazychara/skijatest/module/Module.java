@@ -26,8 +26,10 @@ public abstract class Module {
         this.enabled = !this.enabled;
         if (this.enabled) {
             onEnable();
+            com.lazychara.skijatest.module.NotificationManager.show(this.name + " Enabled");
         } else {
             onDisable();
+            com.lazychara.skijatest.module.NotificationManager.show(this.name + " Disabled");
         }
         com.lazychara.skijatest.config.ConfigManager.save();
     }

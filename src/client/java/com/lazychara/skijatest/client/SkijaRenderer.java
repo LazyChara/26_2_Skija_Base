@@ -9,6 +9,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+
 public class SkijaRenderer implements AutoCloseable {
 
     private final int width;
@@ -18,6 +22,11 @@ public class SkijaRenderer implements AutoCloseable {
     private final Identifier textureId;
     private final Typeface defaultTypeface;
     private boolean dirty = true;
+
+    private Bitmap sharedBitmap;
+    private ImageInfo sharedImageInfo;
+    private static java.lang.reflect.Field nativePixelsField;
+    private static boolean nativePixelsSearched = false;
 
     private static final float SQUIRCLE_N = 5f;
     private static final int SQUIRCLE_SEGMENTS = 20;
@@ -288,32 +297,65 @@ public class SkijaRenderer implements AutoCloseable {
         return fonts;
     }
 
+    private static ByteBuffer getNativeImageBuffer(NativeImage img) {
+        if (!nativePixelsSearched) {
+            nativePixelsSearched = true;
+            for (String name : new String[]{"pixels", "buffer", "data"}) {
+                try {
+                    nativePixelsField = NativeImage.class.getDeclaredField(name);
+                    nativePixelsField.setAccessible(true);
+                    break;
+                } catch (Exception ignored) {}
+            }
+        }
+        if (nativePixelsField != null) {
+            try {
+                Object val = nativePixelsField.get(img);
+                if (val instanceof ByteBuffer bb) return bb;
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
     public void upload() {
-        if (!dirty) return;
+        if (!dirty || surface == null || mcTexture == null) return;
+
+        if (sharedBitmap == null) {
+            sharedImageInfo = ImageInfo.makeN32Premul(width, height);
+            sharedBitmap = new Bitmap();
+            sharedBitmap.allocPixels(sharedImageInfo);
+        }
 
         try (Image snapshot = surface.makeImageSnapshot()) {
-            try (Bitmap bitmap = new Bitmap()) {
-                ImageInfo info = ImageInfo.makeN32Premul(width, height);
-                bitmap.allocPixels(info);
-                snapshot.readPixels(bitmap, 0, 0);
+            snapshot.readPixels(sharedBitmap, 0, 0);
 
-                byte[] pixelBytes = bitmap.readPixels(info, width * 4, 0, 0);
+            byte[] pixelBytes = sharedBitmap.readPixels(sharedImageInfo, width * 4, 0, 0);
 
-                if (pixelBytes != null) {
-                    NativeImage nativeImage = mcTexture.getPixels();
+            if (pixelBytes != null) {
+                for (int i = 0; i < pixelBytes.length; i += 4) {
+                    byte tmp = pixelBytes[i];
+                    pixelBytes[i] = pixelBytes[i + 2];
+                    pixelBytes[i + 2] = tmp;
+                }
+
+                NativeImage nativeImage = mcTexture.getPixels();
+                ByteBuffer nativeBuf = getNativeImageBuffer(nativeImage);
+
+                if (nativeBuf != null) {
+                    nativeBuf.rewind();
+                    nativeBuf.put(pixelBytes);
+                } else {
+                    IntBuffer intBuf = ByteBuffer.wrap(pixelBytes)
+                        .order(ByteOrder.nativeOrder())
+                        .asIntBuffer();
                     for (int row = 0; row < height; row++) {
                         for (int col = 0; col < width; col++) {
-                            int off = (row * width + col) * 4;
-                            int r = pixelBytes[off] & 0xFF;
-                            int g = pixelBytes[off + 1] & 0xFF;
-                            int b = pixelBytes[off + 2] & 0xFF;
-                            int a = pixelBytes[off + 3] & 0xFF;
-                            nativeImage.setPixel(col, row,
-                                    (a << 24) | (b << 16) | (g << 8) | r);
+                            nativeImage.setPixel(col, row, intBuf.get());
                         }
                     }
-                    mcTexture.upload();
                 }
+
+                mcTexture.upload();
             }
         }
         dirty = false;
@@ -326,6 +368,7 @@ public class SkijaRenderer implements AutoCloseable {
 
     @Override
     public void close() {
+        if (sharedBitmap != null) { sharedBitmap.close(); sharedBitmap = null; }
         if (surface != null) { surface.close(); surface = null; }
         if (mcTexture != null) { mcTexture.close(); mcTexture = null; }
     }
