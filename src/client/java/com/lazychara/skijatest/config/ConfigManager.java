@@ -1,0 +1,90 @@
+package com.lazychara.skijatest.config;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.lazychara.skijatest.client.SkijaTestClient;
+import com.lazychara.skijatest.client.SkijaTestScreen;
+import com.lazychara.skijatest.module.BooleanSetting;
+import com.lazychara.skijatest.module.Module;
+import com.lazychara.skijatest.module.ModuleManager;
+import com.lazychara.skijatest.module.Setting;
+import net.fabricmc.loader.api.FabricLoader;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+
+public class ConfigManager {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final File CONFIG_FILE = new File(FabricLoader.getInstance().getConfigDir().toFile(), "skijatest.json");
+
+    public static void save() {
+        try {
+            JsonObject root = new JsonObject();
+            
+            JsonObject ui = new JsonObject();
+            ui.addProperty("cR", SkijaTestScreen.cR);
+            ui.addProperty("cG", SkijaTestScreen.cG);
+            ui.addProperty("cB", SkijaTestScreen.cB);
+            root.add("ui", ui);
+            
+            JsonObject modulesObj = new JsonObject();
+            for (Module mod : ModuleManager.modules) {
+                JsonObject mObj = new JsonObject();
+                mObj.addProperty("enabled", mod.enabled);
+                mObj.addProperty("keybind", mod.keybind);
+                JsonObject settingsObj = new JsonObject();
+                for (Setting s : mod.settings) {
+                    if (s instanceof BooleanSetting) {
+                        BooleanSetting bs = (BooleanSetting) s;
+                        settingsObj.addProperty(s.name, bs.value);
+                    }
+                }
+                mObj.add("settings", settingsObj);
+                modulesObj.add(mod.name, mObj);
+            }
+            root.add("modules", modulesObj);
+
+            try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
+                GSON.toJson(root, writer);
+            }
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.error("[SkijaTest] Failed to save config", e);
+        }
+    }
+
+    public static void load() {
+        if (!CONFIG_FILE.exists()) return;
+        try (FileReader reader = new FileReader(CONFIG_FILE)) {
+            JsonObject root = GSON.fromJson(reader, JsonObject.class);
+            if (root.has("ui")) {
+                JsonObject ui = root.getAsJsonObject("ui");
+                if (ui.has("cR")) SkijaTestScreen.cR = ui.get("cR").getAsInt();
+                if (ui.has("cG")) SkijaTestScreen.cG = ui.get("cG").getAsInt();
+                if (ui.has("cB")) SkijaTestScreen.cB = ui.get("cB").getAsInt();
+            }
+            if (root.has("modules")) {
+                JsonObject modulesObj = root.getAsJsonObject("modules");
+                for (Module mod : ModuleManager.modules) {
+                    if (modulesObj.has(mod.name)) {
+                        JsonObject mObj = modulesObj.getAsJsonObject(mod.name);
+                        if (mObj.has("enabled")) mod.enabled = mObj.get("enabled").getAsBoolean();
+                        if (mObj.has("keybind")) mod.keybind = mObj.get("keybind").getAsInt();
+                        if (mObj.has("settings")) {
+                            JsonObject settingsObj = mObj.getAsJsonObject("settings");
+                            for (Setting s : mod.settings) {
+                                if (s instanceof BooleanSetting && settingsObj.has(s.name)) {
+                                    BooleanSetting bs = (BooleanSetting) s;
+                                    bs.value = settingsObj.get(s.name).getAsBoolean();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.error("[SkijaTest] Failed to load config", e);
+        }
+    }
+}
