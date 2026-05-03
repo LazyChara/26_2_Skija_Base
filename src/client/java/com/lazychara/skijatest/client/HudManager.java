@@ -18,6 +18,8 @@ import java.util.List;
 
 public class HudManager {
     private static SkijaRenderer mainR;
+    private static SkijaRenderer mainFpsTextR;
+    private static SkijaRenderer mainNotifTextR;
     private static SkijaRenderer xyzR;
     private static SkijaRenderer potionR;
     private static int lastGuiScale = -1;
@@ -30,20 +32,32 @@ public class HudManager {
     private static final int POTION_ROW_H = 28;
     private static final int POTION_PAD = 4;
     private static final int SNAP_DISTANCE = 5;
+    private static final float MAIN_CENTER_X = MAIN_W / 2f;
+    private static final float MAIN_TOP_Y = 2f;
+    private static final float MAIN_COLLAPSED_W = 80f;
+    private static final float MAIN_COLLAPSED_H = 22f;
+    private static final float MAIN_EXPANDED_W = 220f;
+    private static final float MAIN_EXPANDED_H = 28f;
+    private static final int MAIN_TEXT_H = 16;
+    private static final long MAIN_FPS_UPDATE_INTERVAL_MS = 250L;
 
     private static long lastTime = 0;
-    private static float currentW = 80f;
-    private static float currentH = 22f;
+    private static float currentW = MAIN_COLLAPSED_W;
+    private static float currentH = MAIN_COLLAPSED_H;
 
-    private static boolean mainDirty = true;
+    private static boolean mainBgDirty = true;
+    private static boolean mainFpsTextDirty = true;
+    private static boolean mainNotifTextDirty = true;
     private static boolean xyzDirty = true;
     private static boolean potionDirty = true;
-    private static int lastFps = -1;
-    private static float lastNotifTimer = -1f;
+    private static int displayedFps = -1;
+    private static String lastNotificationText = "";
+    private static int lastMainTextColor = 0;
+    private static boolean lastEditing = false;
+    private static long lastMainFpsTextureUpdateMs = 0L;
     private static String lastXyzText = "";
     private static String lastPotionKey = "";
     private static int lastPotionRows = 1;
-    private static boolean lastEditing = false;
     private static boolean wasLeftDown = false;
     private static String dragging = null;
     private static int dragOffsetX = 0;
@@ -80,31 +94,47 @@ public class HudManager {
                 if (NotificationManager.notifTimer > 0f) {
                     NotificationManager.notifTimer -= dt;
                     if (NotificationManager.notifTimer < 0f) NotificationManager.notifTimer = 0f;
-                    mainDirty = true;
                 }
 
                 int currentFps = mc.getFps();
+                boolean fpsCanRefresh = displayedFps < 0 || now - lastMainFpsTextureUpdateMs >= MAIN_FPS_UPDATE_INTERVAL_MS;
+                if (fpsCanRefresh) {
+                    if (displayedFps != currentFps) {
+                        displayedFps = currentFps;
+                        mainFpsTextDirty = true;
+                    }
+                    lastMainFpsTextureUpdateMs = now;
+                }
+
                 boolean showingNotif = NotificationManager.notifTimer > 0f;
-                float targetW = showingNotif ? 220f : 80f;
-                float targetH = showingNotif ? 28f : 22f;
+                float targetW = showingNotif ? MAIN_EXPANDED_W : MAIN_COLLAPSED_W;
+                float targetH = showingNotif ? MAIN_EXPANDED_H : MAIN_COLLAPSED_H;
 
                 float speed = 28f;
-                float newW = currentW + (targetW - currentW) * speed * dt;
-                float newH = currentH + (targetH - currentH) * speed * dt;
+                float step = Math.min(1f, speed * dt);
+                float newW = currentW + (targetW - currentW) * step;
+                float newH = currentH + (targetH - currentH) * step;
 
                 if (Math.abs(newW - targetW) < 0.5f) newW = targetW;
                 if (Math.abs(newH - targetH) < 0.5f) newH = targetH;
 
-                boolean animChanged = Math.abs(newW - currentW) > 0.01f || Math.abs(newH - currentH) > 0.01f;
                 currentW = newW;
                 currentH = newH;
 
-                if (lastFps != currentFps || Math.abs(lastNotifTimer - NotificationManager.notifTimer) > 0.01f || animChanged || editing != lastEditing) {
-                    mainDirty = true;
-                    lastFps = currentFps;
-                    lastNotifTimer = NotificationManager.notifTimer;
+                int currentTextColor = textColor();
+                if (currentTextColor != lastMainTextColor) {
+                    mainFpsTextDirty = true;
+                    mainNotifTextDirty = true;
+                    lastMainTextColor = currentTextColor;
                 }
-                lastEditing = editing;
+                if (!NotificationManager.currentNotification.equals(lastNotificationText)) {
+                    mainNotifTextDirty = true;
+                    lastNotificationText = NotificationManager.currentNotification;
+                }
+                if (editing != lastEditing) {
+                    mainBgDirty = true;
+                    lastEditing = editing;
+                }
 
                 String xyzText = makeXyzText(mc);
                 if (!xyzText.equals(lastXyzText) || editing) {
@@ -125,9 +155,17 @@ public class HudManager {
                     lastPotionKey = potionKey;
                 }
 
-                if (mainDirty) {
-                    renderMain(guiScale, editing);
-                    mainDirty = false;
+                if (mainBgDirty) {
+                    renderMainBackground(guiScale, editing);
+                    mainBgDirty = false;
+                }
+                if (mainFpsTextDirty) {
+                    renderMainText(mainFpsTextR, guiScale, "FPS " + displayedFps, currentTextColor);
+                    mainFpsTextDirty = false;
+                }
+                if (mainNotifTextDirty) {
+                    renderMainText(mainNotifTextR, guiScale, NotificationManager.currentNotification, currentTextColor);
+                    mainNotifTextDirty = false;
                 }
                 if (xyzDirty) {
                     renderXyz(guiScale, editing, hudModule.xyz.value, xyzText);
@@ -139,7 +177,8 @@ public class HudManager {
                 }
 
                 try {
-                    blit(g, mainR, hudModule.mainX, hudModule.mainY, MAIN_W, MAIN_H);
+                    blitMainBackground(g, mainR, hudModule.mainX, hudModule.mainY);
+                    blitMainText(g, showingNotif && currentW >= 130f ? mainNotifTextR : mainFpsTextR, hudModule.mainX, hudModule.mainY);
                     if (hudModule.xyz.value || editing) blit(g, xyzR, hudModule.xyzX, hudModule.xyzY, XYZ_W, XYZ_H);
                     if (hudModule.potions.value || editing) {
                         int potionH = getPotionHeight(potionRows);
@@ -169,11 +208,15 @@ public class HudManager {
     private static void ensureRenderers(int guiScale, int potionRows) {
         if (mainR == null || lastGuiScale != guiScale) {
             closeRenderers();
-            mainR = new SkijaRenderer("hud_main", MAIN_W * guiScale, MAIN_H * guiScale);
+            mainR = new SkijaRenderer("hud_main_bg", MAIN_W * guiScale, MAIN_H * guiScale);
+            mainFpsTextR = new SkijaRenderer("hud_main_fps_text", MAIN_W * guiScale, MAIN_TEXT_H * guiScale);
+            mainNotifTextR = new SkijaRenderer("hud_main_notif_text", MAIN_W * guiScale, MAIN_TEXT_H * guiScale);
             xyzR = new SkijaRenderer("hud_xyz", XYZ_W * guiScale, XYZ_H * guiScale);
             potionR = new SkijaRenderer("hud_potions", POTION_W * guiScale, getPotionHeight(potionRows) * guiScale);
             lastGuiScale = guiScale;
-            mainDirty = true;
+            mainBgDirty = true;
+            mainFpsTextDirty = true;
+            mainNotifTextDirty = true;
             xyzDirty = true;
             potionDirty = true;
         }
@@ -186,9 +229,13 @@ public class HudManager {
 
     private static void closeRenderers() {
         if (mainR != null) mainR.close();
+        if (mainFpsTextR != null) mainFpsTextR.close();
+        if (mainNotifTextR != null) mainNotifTextR.close();
         if (xyzR != null) xyzR.close();
         if (potionR != null) potionR.close();
         mainR = null;
+        mainFpsTextR = null;
+        mainNotifTextR = null;
         xyzR = null;
         potionR = null;
     }
@@ -237,9 +284,6 @@ public class HudManager {
             int[] snapped = snapPosition(hud, dragging, mx - dragOffsetX, my - dragOffsetY, mc);
             setPos(hud, dragging, snapped[0], snapped[1]);
             clampPositions(hud, mc);
-            mainDirty = true;
-            xyzDirty = true;
-            potionDirty = true;
         }
 
         if (!leftDown && wasLeftDown && dragging != null) {
@@ -403,9 +447,57 @@ public class HudManager {
         pose.popMatrix();
     }
 
+    private static void blitMainBackground(net.minecraft.client.gui.GuiGraphicsExtractor g, SkijaRenderer r, int x, int y) {
+        if (r == null) return;
+        float srcLeft = MAIN_CENTER_X - MAIN_EXPANDED_W / 2f;
+        float srcTop = MAIN_TOP_Y;
+        float srcCap = MAIN_EXPANDED_H / 2f;
+        float srcCenterW = MAIN_EXPANDED_W - srcCap * 2f;
+
+        float dstLeft = x + MAIN_CENTER_X - currentW / 2f;
+        float dstTop = y + MAIN_TOP_Y;
+        float dstCap = currentH / 2f;
+        float dstCenterW = Math.max(0f, currentW - dstCap * 2f);
+
+        blitSubRect(g, r, dstLeft, dstTop, dstCap, currentH, srcLeft, srcTop, srcCap, MAIN_EXPANDED_H);
+        if (dstCenterW > 0.5f) {
+            blitSubRect(g, r, dstLeft + dstCap, dstTop, dstCenterW, currentH, srcLeft + srcCap, srcTop, srcCenterW, MAIN_EXPANDED_H);
+        }
+        blitSubRect(g, r, dstLeft + dstCap + dstCenterW, dstTop, dstCap, currentH, srcLeft + srcCap + srcCenterW, srcTop, srcCap, MAIN_EXPANDED_H);
+    }
+
+    private static void blitMainText(net.minecraft.client.gui.GuiGraphicsExtractor g, SkijaRenderer r, int x, int y) {
+        if (r == null) return;
+        float visibleW = Math.max(1f, currentW - 12f);
+        float srcX = MAIN_CENTER_X - visibleW / 2f;
+        float dstX = x + MAIN_CENTER_X - visibleW / 2f;
+        float dstY = y + MAIN_TOP_Y + (currentH - MAIN_TEXT_H) / 2f;
+        blitSubRect(g, r, dstX, dstY, visibleW, MAIN_TEXT_H, srcX, 0f, visibleW, MAIN_TEXT_H);
+    }
+
+    private static void blitSubRect(net.minecraft.client.gui.GuiGraphicsExtractor g, SkijaRenderer r,
+                                    float dstX, float dstY, float dstW, float dstH,
+                                    float srcX, float srcY, float srcW, float srcH) {
+        int srcPxX = Math.round(srcX * lastGuiScale);
+        int srcPxY = Math.round(srcY * lastGuiScale);
+        int srcPxW = Math.max(1, Math.round(srcW * lastGuiScale));
+        int srcPxH = Math.max(1, Math.round(srcH * lastGuiScale));
+        int dstPxW = Math.max(1, Math.round(dstW * lastGuiScale));
+        int dstPxH = Math.max(1, Math.round(dstH * lastGuiScale));
+        float inv = 1f / lastGuiScale;
+
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(dstX, dstY);
+        pose.scale(inv, inv);
+        g.blit(RenderPipelines.GUI_TEXTURED, r.textureId(), 0, 0, (float) srcPxX, (float) srcPxY, dstPxW, dstPxH, srcPxW, srcPxH, r.getWidth(), r.getHeight());
+        pose.popMatrix();
+    }
+
     private static Typeface cachedTf = null;
 
     private static Typeface font(SkijaRenderer r) {
+        SkijaTestScreen.ensureFontLoaded();
         Typeface tf = SkijaTestScreen.curTf;
         if (tf == null) {
             if (cachedTf == null) {
@@ -426,42 +518,39 @@ public class HudManager {
         return (255 << 24) | (Math.max(0, Math.min(255, SkijaTestScreen.cR)) << 16) | (Math.max(0, Math.min(255, SkijaTestScreen.cG)) << 8) | Math.max(0, Math.min(255, SkijaTestScreen.cB));
     }
 
-    private static void renderMain(int guiScale, boolean editing) {
+    private static void renderMainBackground(int guiScale, boolean editing) {
         if (mainR == null) return;
         mainR.clear(0x00000000);
         var c = mainR.canvas();
         c.save();
         c.scale(guiScale, guiScale);
 
-        float centerX = MAIN_W / 2f;
-        float topY = 2f;
-        float left = centerX - currentW / 2f;
-        float right = centerX + currentW / 2f;
-        float bottom = topY + currentH;
-        float cornerRadius = currentH / 2f;
+        float left = MAIN_CENTER_X - MAIN_EXPANDED_W / 2f;
+        float cornerRadius = MAIN_EXPANDED_H / 2f;
         int bg = editing ? 0x55FFFFFF : 0x40FFFFFF;
         int border = editing ? 0xAAFFFFFF : 0x66FFFFFF;
 
-        mainR.drawRoundedRect(left, topY, currentW, currentH, cornerRadius, bg);
-        mainR.drawRoundedRectStroke(left, topY, currentW, currentH, cornerRadius, 1.2f, border);
+        mainR.drawRoundedRect(left, MAIN_TOP_Y, MAIN_EXPANDED_W, MAIN_EXPANDED_H, cornerRadius, bg);
+        mainR.drawRoundedRectStroke(left, MAIN_TOP_Y, MAIN_EXPANDED_W, MAIN_EXPANDED_H, cornerRadius, 1.2f, border);
 
-        c.save();
-        c.clipRect(io.github.humbleui.types.Rect.makeLTRB(left + 6, topY, right - 6, bottom));
-        Typeface tf = font(mainR);
-        float fontSize = 11f;
-        float textY = topY + (currentH - fontSize) / 2f;
-        boolean showingNotif = NotificationManager.notifTimer > 0f;
-        if (!showingNotif || currentW < 130f) {
-            mainR.drawTextCentered("FPS " + lastFps, centerX, textY, tf, fontSize, textColor());
-        } else {
-            float alpha = Math.min(1f, (currentW - 130f) / 60f);
-            int a = Math.round(alpha * 255f);
-            int textCol = (a << 24) | (textColor() & 0xFFFFFF);
-            mainR.drawTextCentered(NotificationManager.currentNotification, centerX, textY, tf, fontSize, textCol);
-        }
-        c.restore();
         c.restore();
         mainR.upload();
+    }
+
+    private static void renderMainText(SkijaRenderer r, int guiScale, String text, int color) {
+        if (r == null) return;
+        r.clear(0x00000000);
+        var c = r.canvas();
+        c.save();
+        c.scale(guiScale, guiScale);
+
+        Typeface tf = font(r);
+        float fontSize = 11f;
+        float textY = (MAIN_TEXT_H - fontSize) / 2f;
+        r.drawTextCentered(text == null ? "" : text, MAIN_CENTER_X, textY, tf, fontSize, color);
+
+        c.restore();
+        r.upload();
     }
 
     private static void renderXyz(int guiScale, boolean editing, boolean enabled, String xyzText) {
@@ -480,8 +569,7 @@ public class HudManager {
         int col = enabled ? textColor() : 0x88FFFFFF;
         Typeface tf = font(xyzR);
         float textW = xyzR.measureText(text, tf, 11f);
-        float x = editing ? (XYZ_W - textW) / 2f : XYZ_W - textW - 2f;
-        xyzR.drawText(text, x, 6f, tf, 11f, col);
+        xyzR.drawText(text, (XYZ_W - textW) / 2f, 6f, tf, 11f, col);
         c.restore();
         xyzR.upload();
     }

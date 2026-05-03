@@ -3,6 +3,7 @@ package com.lazychara.skijatest.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.lazychara.skijatest.client.MainMenuRenderer;
 import com.lazychara.skijatest.client.SkijaTestClient;
 import com.lazychara.skijatest.client.SkijaTestScreen;
 import com.lazychara.skijatest.module.BooleanSetting;
@@ -28,6 +29,8 @@ public class ConfigManager {
             ui.addProperty("cR", SkijaTestScreen.cR);
             ui.addProperty("cG", SkijaTestScreen.cG);
             ui.addProperty("cB", SkijaTestScreen.cB);
+            ui.addProperty("font", SkijaTestScreen.selectedFontName);
+            ui.addProperty("mainMenuBg", MainMenuRenderer.selectedBgId);
             root.add("ui", ui);
 
             JsonObject modulesObj = new JsonObject();
@@ -74,6 +77,8 @@ public class ConfigManager {
                 if (ui.has("cR")) SkijaTestScreen.cR = ui.get("cR").getAsInt();
                 if (ui.has("cG")) SkijaTestScreen.cG = ui.get("cG").getAsInt();
                 if (ui.has("cB")) SkijaTestScreen.cB = ui.get("cB").getAsInt();
+                if (ui.has("font")) SkijaTestScreen.selectedFontName = ui.get("font").getAsString();
+                if (ui.has("mainMenuBg")) MainMenuRenderer.selectedBgId = ui.get("mainMenuBg").getAsString();
             }
             if (root.has("modules")) {
                 JsonObject modulesObj = root.getAsJsonObject("modules");

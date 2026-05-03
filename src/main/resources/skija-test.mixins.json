@@ -3,7 +3,8 @@
   "package": "com.lazychara.skijatest.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "HudMixin"
+    "HudMixin",
+    "TitleScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

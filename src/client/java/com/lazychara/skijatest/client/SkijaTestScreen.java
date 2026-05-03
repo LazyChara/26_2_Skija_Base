@@ -27,6 +27,7 @@ public class SkijaTestScreen extends Screen {
     private static String[] fonts;
     private static java.util.LinkedHashMap<String, Typeface> bundled;
     private static int selIdx = 0;
+    public static String selectedFontName = "";
     public static Typeface curTf;
     private int guiScale = 1;
     public static int cR = 255, cG = 255, cB = 255;
@@ -66,9 +67,7 @@ public class SkijaTestScreen extends Screen {
         moduleR = new SkijaRenderer("skija_module", (MODULE_W + 4) * guiScale, (MODULE_H + 4) * guiScale);
 
         if (fonts == null) {
-            bundled = SkijaRenderer.loadAllBundledFonts();
-            fonts = bundled.keySet().toArray(new String[0]);
-            curTf = bundled.isEmpty() ? null : bundled.values().iterator().next();
+            ensureFontLoaded();
         }
 
         int totalW = MODULE_W + DD_GAP + PANEL_W + DD_GAP + DD_W;
@@ -82,6 +81,22 @@ public class SkijaTestScreen extends Screen {
         panelDirty = true;
         ddDirty = true;
         moduleDirty = true;
+    }
+
+    public static void ensureFontLoaded() {
+        if (fonts != null) return;
+        bundled = SkijaRenderer.loadAllBundledFonts();
+        fonts = bundled.keySet().toArray(new String[0]);
+        if (!selectedFontName.isEmpty()) {
+            for (int i = 0; i < fonts.length; i++) {
+                if (fonts[i].equals(selectedFontName)) {
+                    selIdx = i;
+                    break;
+                }
+            }
+        }
+        curTf = fonts.length == 0 ? null : bundled.get(fonts[selIdx]);
+        if (selectedFontName.isEmpty() && fonts.length > 0) selectedFontName = fonts[selIdx];
     }
 
     @Override
@@ -354,7 +369,7 @@ public class SkijaTestScreen extends Screen {
                     int cardAlpha = Math.round(t * 255);
                     int cardBg = (cardAlpha << 24) | 0x2A2A2A;
                     int cardStroke = (cardAlpha << 24) | 0x444444;
-                    
+
                     moduleR.drawRoundedRect(currX, currY, currW, currH, CORNER_R - 2f, cardBg);
                     moduleR.drawRoundedRectStroke(currX, currY, currW, currH, CORNER_R - 2f, 1.5f, cardStroke);
 
@@ -444,6 +459,7 @@ public class SkijaTestScreen extends Screen {
                     if (ni < fonts.length) {
                         selIdx = ni;
                         loadFont();
+                        com.lazychara.skijatest.config.ConfigManager.save();
                     }
                     dropdownOpen = false;
                     ddDirty = true;
@@ -598,6 +614,7 @@ public class SkijaTestScreen extends Screen {
 
     private void loadFont() {
         String n = fonts[selIdx];
+        selectedFontName = n;
         curTf = bundled.get(n);
     }
 

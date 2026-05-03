@@ -8,10 +8,9 @@ import io.github.humbleui.types.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
 
 public class SkijaRenderer implements AutoCloseable {
 
@@ -25,8 +24,6 @@ public class SkijaRenderer implements AutoCloseable {
 
     private Bitmap sharedBitmap;
     private ImageInfo sharedImageInfo;
-    private static java.lang.reflect.Field nativePixelsField;
-    private static boolean nativePixelsSearched = false;
 
     private static final float SQUIRCLE_N = 5f;
     private static final int SQUIRCLE_SEGMENTS = 20;
@@ -153,6 +150,8 @@ public class SkijaRenderer implements AutoCloseable {
 
     public void drawText(String text, float x, float y, float fontSize, int argbColor) {
         if (defaultTypeface == null) return;
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
         try (Font font = new Font(defaultTypeface, fontSize);
              Paint paint = new Paint()) {
             paint.setColor(argbColor);
@@ -166,6 +165,8 @@ public class SkijaRenderer implements AutoCloseable {
     public void drawText(String text, float x, float y,
                           Typeface typeface, float fontSize, int argbColor) {
         if (typeface == null) { drawText(text, x, y, fontSize, argbColor); return; }
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
         try (Font font = new Font(typeface, fontSize);
              Paint paint = new Paint()) {
             paint.setColor(argbColor);
@@ -178,6 +179,8 @@ public class SkijaRenderer implements AutoCloseable {
 
     public void drawTextCentered(String text, float centerX, float y, float fontSize, int argbColor) {
         if (defaultTypeface == null) return;
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
         try (Font font = new Font(defaultTypeface, fontSize);
              Paint paint = new Paint()) {
             paint.setColor(argbColor);
@@ -192,6 +195,8 @@ public class SkijaRenderer implements AutoCloseable {
     public void drawTextCentered(String text, float centerX, float y,
                                   Typeface typeface, float fontSize, int argbColor) {
         if (typeface == null) { drawTextCentered(text, centerX, y, fontSize, argbColor); return; }
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
         try (Font font = new Font(typeface, fontSize);
              Paint paint = new Paint()) {
             paint.setColor(argbColor);
@@ -206,9 +211,40 @@ public class SkijaRenderer implements AutoCloseable {
     public float measureText(String text, Typeface typeface, float fontSize) {
         Typeface tf = typeface != null ? typeface : defaultTypeface;
         if (tf == null) return 0;
+        text = sanitizeText(text);
+        if (text.isEmpty()) return 0;
         try (Font font = new Font(tf, fontSize)) {
             return font.measureTextWidth(text);
         }
+    }
+
+    private static String sanitizeText(String text) {
+        if (text == null || text.isEmpty()) return "";
+        StringBuilder cleaned = null;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (Character.isHighSurrogate(ch)) {
+                if (i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1))) {
+                    if (cleaned != null) cleaned.append(ch).append(text.charAt(i + 1));
+                    i++;
+                } else {
+                    if (cleaned == null) {
+                        cleaned = new StringBuilder(text.length());
+                        cleaned.append(text, 0, i);
+                    }
+                    cleaned.append('\uFFFD');
+                }
+            } else if (Character.isLowSurrogate(ch)) {
+                if (cleaned == null) {
+                    cleaned = new StringBuilder(text.length());
+                    cleaned.append(text, 0, i);
+                }
+                cleaned.append('\uFFFD');
+            } else if (cleaned != null) {
+                cleaned.append(ch);
+            }
+        }
+        return cleaned == null ? text : cleaned.toString();
     }
 
     public static String[] getSystemFontFamilies() {
@@ -297,31 +333,11 @@ public class SkijaRenderer implements AutoCloseable {
         return fonts;
     }
 
-    private static ByteBuffer getNativeImageBuffer(NativeImage img) {
-        if (!nativePixelsSearched) {
-            nativePixelsSearched = true;
-            for (String name : new String[]{"pixels", "buffer", "data"}) {
-                try {
-                    nativePixelsField = NativeImage.class.getDeclaredField(name);
-                    nativePixelsField.setAccessible(true);
-                    break;
-                } catch (Exception ignored) {}
-            }
-        }
-        if (nativePixelsField != null) {
-            try {
-                Object val = nativePixelsField.get(img);
-                if (val instanceof ByteBuffer bb) return bb;
-            } catch (Exception ignored) {}
-        }
-        return null;
-    }
-
     public void upload() {
         if (!dirty || surface == null || mcTexture == null) return;
 
         if (sharedBitmap == null) {
-            sharedImageInfo = ImageInfo.makeN32Premul(width, height);
+            sharedImageInfo = ImageInfo.makeN32(width, height, ColorAlphaType.UNPREMUL);
             sharedBitmap = new Bitmap();
             sharedBitmap.allocPixels(sharedImageInfo);
         }
@@ -339,21 +355,9 @@ public class SkijaRenderer implements AutoCloseable {
                 }
 
                 NativeImage nativeImage = mcTexture.getPixels();
-                ByteBuffer nativeBuf = getNativeImageBuffer(nativeImage);
-
-                if (nativeBuf != null) {
-                    nativeBuf.rewind();
-                    nativeBuf.put(pixelBytes);
-                } else {
-                    IntBuffer intBuf = ByteBuffer.wrap(pixelBytes)
-                        .order(ByteOrder.nativeOrder())
-                        .asIntBuffer();
-                    for (int row = 0; row < height; row++) {
-                        for (int col = 0; col < width; col++) {
-                            nativeImage.setPixel(col, row, intBuf.get());
-                        }
-                    }
-                }
+                ByteBuffer nativeBuf = MemoryUtil.memByteBuffer(nativeImage.getPointer(), pixelBytes.length);
+                nativeBuf.rewind();
+                nativeBuf.put(pixelBytes);
 
                 mcTexture.upload();
             }
