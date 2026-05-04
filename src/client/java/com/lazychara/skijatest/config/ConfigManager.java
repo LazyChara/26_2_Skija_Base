@@ -1,5 +1,4 @@
 package com.lazychara.skijatest.config;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -12,19 +11,15 @@ import com.lazychara.skijatest.module.ModuleManager;
 import com.lazychara.skijatest.module.Setting;
 import com.lazychara.skijatest.module.render.HUD;
 import net.fabricmc.loader.api.FabricLoader;
-
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-
 public class ConfigManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final File CONFIG_FILE = new File(FabricLoader.getInstance().getConfigDir().toFile(), "skijatest.json");
-
     public static void save() {
         try {
             JsonObject root = new JsonObject();
-
             JsonObject ui = new JsonObject();
             ui.addProperty("cR", SkijaTestScreen.cR);
             ui.addProperty("cG", SkijaTestScreen.cG);
@@ -32,7 +27,6 @@ public class ConfigManager {
             ui.addProperty("font", SkijaTestScreen.selectedFontName);
             ui.addProperty("mainMenuBg", MainMenuRenderer.selectedBgId);
             root.add("ui", ui);
-
             JsonObject modulesObj = new JsonObject();
             for (Module mod : ModuleManager.modules) {
                 JsonObject mObj = new JsonObject();
@@ -59,7 +53,6 @@ public class ConfigManager {
                 modulesObj.add(mod.name, mObj);
             }
             root.add("modules", modulesObj);
-
             try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
                 GSON.toJson(root, writer);
             }
@@ -67,7 +60,6 @@ public class ConfigManager {
             SkijaTestClient.LOGGER.error("[SkijaTest] Failed to save config", e);
         }
     }
-
     public static void load() {
         if (!CONFIG_FILE.exists()) return;
         try (FileReader reader = new FileReader(CONFIG_FILE)) {

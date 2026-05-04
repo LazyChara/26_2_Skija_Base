@@ -1,5 +1,4 @@
 package com.lazychara.skijatest.client;
-
 import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import io.github.humbleui.skija.Bitmap;
@@ -20,7 +19,6 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
-
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
@@ -31,7 +29,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
 public class MainMenuRenderer {
     private static final int MENU_X = 26;
     private static final int BUTTON_W = 178;
@@ -50,9 +47,7 @@ public class MainMenuRenderer {
             "menu.options",
             "menu.quit"
     };
-
     public static String selectedBgId = "builtin:1.png";
-
     private static SkijaRenderer renderer;
     private static SkijaRenderer menuHoverR;
     private static SkijaRenderer bgSelectorHoverR;
@@ -83,7 +78,6 @@ public class MainMenuRenderer {
     private static int lastTextColor = 0;
     private static List<BgOption> bgOptions = new ArrayList<>();
     private static long lastBgScan = 0L;
-
     public static void layoutVanillaButtons(TitleScreen screen) {
         Map<String, AbstractWidget> widgets = findMenuWidgets(screen);
         int y = menuStartY(screen.height);
@@ -98,11 +92,9 @@ public class MainMenuRenderer {
             }
         }
     }
-
     public static void render(TitleScreen screen, GuiGraphicsExtractor g, int mx, int my, float delta) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.getWindow() == null) return;
-
         int guiScale = Math.max(1, mc.getWindow().getGuiScale());
         if (renderer == null || lastGuiScale != guiScale || lastW != screen.width || lastH != screen.height) {
             closeRenderer();
@@ -110,13 +102,11 @@ public class MainMenuRenderer {
             menuHoverR = new SkijaRenderer("main_menu_hover", BUTTON_W * guiScale, BUTTON_H * guiScale);
             bgSelectorHoverR = new SkijaRenderer("main_menu_bg_selector_hover", BG_SELECTOR_W * guiScale, BG_SELECTOR_H * guiScale);
             bgOptionHoverR = new SkijaRenderer("main_menu_bg_option_hover", BG_SELECTOR_W * guiScale, BG_OPTION_H * guiScale);
-
             lastGuiScale = guiScale;
             lastW = screen.width;
             lastH = screen.height;
             uiDirty = true;
         }
-
         int hoverIndex = hoverMenuIndex(mx, my, screen.height);
         boolean selectorHover = isInsideBgSelector(mx, my, screen.width, screen.height);
         int selectorRowHover = bgSelectorOpen ? hoverBgOptionIndex(mx, my, screen.width, screen.height) : -1;
@@ -144,16 +134,13 @@ public class MainMenuRenderer {
             var c = renderer.canvas();
             c.save();
             c.scale(guiScale, guiScale);
-
             drawMenu(screen, mx, my);
             drawPlayerInfo(mc, screen.width);
             drawBgSelector(screen.width, screen.height, mx, my);
-
             c.restore();
             renderer.upload();
             uiDirty = false;
         }
-
         drawBackground(g, mx, my, screen.width, screen.height);
         blitFull(g);
         if (hoverIndex >= 0) blitMenuHover(g, MENU_X, menuStartY(screen.height) + hoverIndex * (BUTTON_H + BUTTON_GAP));
@@ -161,7 +148,6 @@ public class MainMenuRenderer {
         if (selectorRowHover >= 0 && !isBgOptionSelected(selectorRowHover)) blitBgOptionHover(g, screen.width, screen.height, selectorRowHover);
         drawPlayerHead(g, mc, screen.width);
     }
-
     private static void updateUiDirtyState(TitleScreen screen, Minecraft mc) {
         String playerName = mc.getUser() == null ? "Player" : mc.getUser().getName();
         int color = textColor();
@@ -172,7 +158,6 @@ public class MainMenuRenderer {
             uiDirty = true;
         }
     }
-
     private static int hoverMenuIndex(double mx, double my, int screenH) {
         int y = menuStartY(screenH);
         for (int i = 0; i < MENU_KEYS.length; i++) {
@@ -181,13 +166,11 @@ public class MainMenuRenderer {
         }
         return -1;
     }
-
     private static boolean isInsideBgSelector(double mx, double my, int screenW, int screenH) {
         int x = screenW - BG_SELECTOR_W - BG_SELECTOR_PAD;
         int y = screenH - BG_SELECTOR_H - BG_SELECTOR_PAD;
         return mx >= x && mx <= x + BG_SELECTOR_W && my >= y && my <= y + BG_SELECTOR_H;
     }
-
     private static int hoverBgOptionIndex(double mx, double my, int screenW, int screenH) {
         int x = screenW - BG_SELECTOR_W - BG_SELECTOR_PAD;
         int y = screenH - BG_SELECTOR_H - BG_SELECTOR_PAD;
@@ -198,7 +181,6 @@ public class MainMenuRenderer {
         int index = (int) ((my - listY) / BG_OPTION_H);
         return index >= 0 && index < optionCount ? index : -1;
     }
-
     public static boolean mouseClicked(TitleScreen screen, MouseButtonEvent event, boolean doubleClick) {
         double mx = event.x();
         double my = event.y();
@@ -213,7 +195,6 @@ public class MainMenuRenderer {
         int optionCount = Math.min(8, bgOptions.size());
         int listH = optionCount * BG_OPTION_H;
         int listY = y - listH - 6;
-
         if (bgSelectorOpen) {
             if (mx >= x && mx <= x + BG_SELECTOR_W && my >= listY && my <= listY + listH) {
                 int index = (int) ((my - listY) / BG_OPTION_H);
@@ -230,13 +211,11 @@ public class MainMenuRenderer {
                 return true;
             }
         }
-
         if (mx >= x && mx <= x + BG_SELECTOR_W && my >= y && my <= y + BG_SELECTOR_H) {
             bgSelectorOpen = !bgSelectorOpen;
             uiDirty = true;
             return true;
         }
-
         String menuKey = hitMenu(mx, my, screenH);
         if (menuKey == null && (mx > screenW || my > screenH)) {
             int guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
@@ -252,7 +231,6 @@ public class MainMenuRenderer {
         }
         return false;
     }
-
     private static String hitMenu(double mx, double my, int screenH) {
         int y = menuStartY(screenH);
         for (String key : MENU_KEYS) {
@@ -263,13 +241,11 @@ public class MainMenuRenderer {
         }
         return null;
     }
-
     public static void close() {
         closeRenderer();
         closeBackground();
         uiDirty = true;
     }
-
     private static Map<String, AbstractWidget> findMenuWidgets(TitleScreen screen) {
         Map<String, AbstractWidget> result = new HashMap<>();
         Map<String, String> localized = localizedLabels();
@@ -284,14 +260,12 @@ public class MainMenuRenderer {
         }
         return result;
     }
-
     private static String keyByLocalizedText(Map<String, String> localized, String text) {
         for (Map.Entry<String, String> entry : localized.entrySet()) {
             if (entry.getValue().equals(text)) return entry.getKey();
         }
         return null;
     }
-
     private static Map<String, String> localizedLabels() {
         Map<String, String> labels = new LinkedHashMap<>();
         for (String key : MENU_KEYS) {
@@ -299,13 +273,11 @@ public class MainMenuRenderer {
         }
         return labels;
     }
-
     private static void drawBackground(GuiGraphicsExtractor g, int mx, int my, int w, int h) {
         if (!ensureBackgroundTexture()) {
             g.fill(0, 0, w, h, 0xFF101018);
             return;
         }
-
         float zoom = 1.08f;
         float targetRatio = (float) w / Math.max(1f, h);
         float bgRatio = backgroundW / Math.max(1f, (float) backgroundH);
@@ -318,7 +290,6 @@ public class MainMenuRenderer {
             drawW = w * zoom;
             drawH = drawW / bgRatio;
         }
-
         float mouseX = w <= 0 ? 0.5f : mx / (float) w;
         float mouseY = h <= 0 ? 0.5f : my / (float) h;
         float maxX = Math.max(0f, drawW - w);
@@ -327,11 +298,9 @@ public class MainMenuRenderer {
         int y = Math.round(-maxY * mouseY);
         int dw = Math.round(drawW);
         int dh = Math.round(drawH);
-
         g.blit(RenderPipelines.GUI_TEXTURED, backgroundTextureId, x, y, 0f, 0f, dw, dh, backgroundW, backgroundH, backgroundW, backgroundH);
         g.fill(0, 0, w, h, 0x66000000);
     }
-
     private static void drawMenu(TitleScreen screen, int mx, int my) {
         Typeface tf = font();
         int y = menuStartY(screen.height);
@@ -343,7 +312,6 @@ public class MainMenuRenderer {
             y += BUTTON_H + BUTTON_GAP;
         }
     }
-
     private static void renderMenuHover(int guiScale, int hoverIndex) {
         if (menuHoverR == null || hoverIndex < 0 || hoverIndex >= MENU_KEYS.length) return;
         menuHoverR.clear(0x00000000);
@@ -358,7 +326,6 @@ public class MainMenuRenderer {
         c.restore();
         menuHoverR.upload();
     }
-
     private static void renderBgSelectorHover(int guiScale, String label, int color) {
         if (bgSelectorHoverR == null) return;
         bgSelectorHoverR.clear(0x00000000);
@@ -372,7 +339,6 @@ public class MainMenuRenderer {
         c.restore();
         bgSelectorHoverR.upload();
     }
-
     private static void renderBgOptionHover(int guiScale, int rowIndex) {
         if (bgOptionHoverR == null || rowIndex < 0 || rowIndex >= bgOptions.size()) return;
         bgOptionHoverR.clear(0x00000000);
@@ -387,16 +353,13 @@ public class MainMenuRenderer {
         c.restore();
         bgOptionHoverR.upload();
     }
-
     private static boolean isBgOptionSelected(int index) {
         return index >= 0 && index < bgOptions.size() && bgOptions.get(index).id.equals(selectedBgId);
     }
-
     private static String bgSelectorLabel() {
         String label = "BG: " + selectedBgName();
         return label.length() > 20 ? label.substring(0, 18) + ".." : label;
     }
-
     private static void drawPlayerInfo(Minecraft mc, int screenW) {
         Typeface tf = font();
         String name = mc.getUser() == null ? "Player" : mc.getUser().getName();
@@ -408,20 +371,16 @@ public class MainMenuRenderer {
         renderer.drawRoundedRectStroke(x, y, boxW, 34f, 14f, 1.1f, 0x66FFFFFF);
         renderer.drawText(name, x + 44f, y + 10f, tf, 13f, textColor());
     }
-
     private static void drawBgSelector(int screenW, int screenH, int mx, int my) {
         ensureBgOptions();
         Typeface tf = font();
         int x = screenW - BG_SELECTOR_W - BG_SELECTOR_PAD;
         int y = screenH - BG_SELECTOR_H - BG_SELECTOR_PAD;
         String label = bgSelectorLabel();
-
         renderer.drawRoundedRect(x, y, BG_SELECTOR_W, BG_SELECTOR_H, 10f, bgSelectorOpen ? 0x55FFFFFF : 0x35FFFFFF);
         renderer.drawRoundedRectStroke(x, y, BG_SELECTOR_W, BG_SELECTOR_H, 10f, 1.1f, bgSelectorOpen ? 0xCCFFFFFF : 0x66FFFFFF);
         renderer.drawText(label, x + 10, y + 6, tf, 10.5f, textColor());
-
         if (!bgSelectorOpen) return;
-
         int optionCount = Math.min(8, bgOptions.size());
         int listH = optionCount * BG_OPTION_H;
         int listY = y - listH - 6;
@@ -439,7 +398,6 @@ public class MainMenuRenderer {
             renderer.drawText(name, x + 10, rowY + 6, tf, 10f, selected ? 0xFFFFFFFF : 0xB3FFFFFF);
         }
     }
-
     private static void drawPlayerHead(GuiGraphicsExtractor g, Minecraft mc, int screenW) {
         String name = mc.getUser() == null ? "Player" : mc.getUser().getName();
         float textW = renderer.measureText(name, font(), 13f);
@@ -451,24 +409,20 @@ public class MainMenuRenderer {
             blitAvatar(g, x, y);
         }
     }
-
     private static void ensureAvatarRenderer(Minecraft mc) {
         int guiScale = Math.max(1, mc.getWindow().getGuiScale());
         String key = mc.getUser() == null ? "" : mc.getUser().getProfileId().toString();
         if (avatarR != null && key.equals(avatarProfileKey) && guiScale == lastAvatarGuiScale) return;
         if (avatarLoadFailed && key.equals(avatarProfileKey) && guiScale == lastAvatarGuiScale) return;
-
         closeAvatarRenderer();
         avatarProfileKey = key;
         lastAvatarGuiScale = guiScale;
         avatarLoadFailed = false;
-
         String skinUrl = findSkinUrl(mc);
         if (skinUrl == null || skinUrl.isEmpty()) {
             String name = mc.getUser() == null ? "Steve" : mc.getUser().getName();
             skinUrl = "https://minotar.net/skin/" + name;
         }
-
         try (InputStream is = URI.create(skinUrl).toURL().openStream()) {
             byte[] bytes = is.readAllBytes();
             try (var skinImage = io.github.humbleui.skija.Image.makeDeferredFromEncodedBytes(bytes)) {
@@ -477,18 +431,15 @@ public class MainMenuRenderer {
                 var c = avatarR.canvas();
                 c.save();
                 c.scale(guiScale, guiScale);
-
                 try (var builder = new io.github.humbleui.skija.PathBuilder()) {
                     builder.addCircle(AVATAR_SIZE / 2f, AVATAR_SIZE / 2f, AVATAR_SIZE / 2f - 0.3f);
                     try (var circle = builder.detach()) {
                         c.clipPath(circle, true);
                     }
                 }
-
                 SkinPixels skinPixels = readSkinPixels(skinImage);
                 drawSkinRegion(c, skinPixels, 8, 8, 8, 0, 0, AVATAR_SIZE);
                 drawSkinRegion(c, skinPixels, 40, 8, 8, 0, 0, AVATAR_SIZE);
-
                 c.restore();
                 var c2 = avatarR.canvas();
                 c2.save();
@@ -509,9 +460,7 @@ public class MainMenuRenderer {
             SkijaTestClient.LOGGER.warn("[SkijaTest] Failed to load circular avatar skin", e);
         }
     }
-
     private record SkinPixels(int width, int height, byte[] bgra) {}
-
     private static SkinPixels readSkinPixels(Image image) {
         ImageInfo info = image.getImageInfo();
         int w = info.getWidth();
@@ -525,7 +474,6 @@ public class MainMenuRenderer {
             return new SkinPixels(w, h, bytes);
         }
     }
-
     private static void drawSkinRegion(io.github.humbleui.skija.Canvas c, SkinPixels pixels,
                                        int srcX, int srcY, int srcSize,
                                        float dstX, float dstY, float dstSize) {
@@ -550,7 +498,6 @@ public class MainMenuRenderer {
             }
         }
     }
-
     private static int skinPixelArgb(SkinPixels pixels, int x, int y) {
         int offset = (y * pixels.width() + x) * 4;
         byte[] data = pixels.bgra();
@@ -560,7 +507,6 @@ public class MainMenuRenderer {
         int a = data[offset + 3] & 0xFF;
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
-
     private static void createFallbackAvatar(int guiScale) {
         try {
             avatarR = new SkijaRenderer("main_menu_avatar", AVATAR_SIZE * guiScale, AVATAR_SIZE * guiScale);
@@ -582,7 +528,6 @@ public class MainMenuRenderer {
             closeAvatarRenderer();
         }
     }
-
     private static String findSkinUrl(Minecraft mc) {
         try {
             var profile = mc.getGameProfile();
@@ -600,7 +545,6 @@ public class MainMenuRenderer {
             return null;
         }
     }
-
     private static void blitAvatar(GuiGraphicsExtractor g, int x, int y) {
         float inv = 1f / lastAvatarGuiScale;
         var pose = g.pose();
@@ -610,7 +554,6 @@ public class MainMenuRenderer {
         g.blit(RenderPipelines.GUI_TEXTURED, avatarR.textureId(), 0, 0, 0f, 0f, avatarR.getWidth(), avatarR.getHeight(), avatarR.getWidth(), avatarR.getHeight());
         pose.popMatrix();
     }
-
     private static void closeAvatarRenderer() {
         if (avatarR != null) {
             avatarR.close();
@@ -623,7 +566,6 @@ public class MainMenuRenderer {
         if (option == null && !bgOptions.isEmpty()) option = bgOptions.getFirst();
         if (option == null) return false;
         if (backgroundTexture != null && option.id.equals(loadedBgId)) return true;
-
         closeBackground();
         loadedBgId = option.id;
         try {
@@ -640,7 +582,6 @@ public class MainMenuRenderer {
             return false;
         }
     }
-
     private static NativeImage readBackgroundNativeImage(BgOption option) throws Exception {
         byte[] bytes;
         if (option.resourcePath != null) {
@@ -653,14 +594,12 @@ public class MainMenuRenderer {
         } else {
             return null;
         }
-
         try {
             return NativeImage.read(bytes);
         } catch (Exception ignored) {
             return decodeBackgroundWithSkija(bytes);
         }
     }
-
     private static NativeImage decodeBackgroundWithSkija(byte[] bytes) throws Exception {
         try (Image image = Image.makeDeferredFromEncodedBytes(bytes)) {
             if (image == null) return null;
@@ -689,19 +628,16 @@ public class MainMenuRenderer {
             }
         }
     }
-
     private static void selectBackground(String id) {
         selectedBgId = id;
         closeBackground();
         uiDirty = true;
         com.lazychara.skijatest.config.ConfigManager.save();
     }
-
     private static String selectedBgName() {
         BgOption option = selectedBgOption();
         return option == null ? "None" : option.displayName;
     }
-
     private static BgOption selectedBgOption() {
         ensureBgOptions();
         for (BgOption option : bgOptions) {
@@ -709,36 +645,30 @@ public class MainMenuRenderer {
         }
         return null;
     }
-
     private static void ensureBgOptions() {
         long now = System.currentTimeMillis();
         if (!bgOptions.isEmpty() && now - lastBgScan < 3000L) return;
         lastBgScan = now;
-
         List<BgOption> options = new ArrayList<>();
         scanBundledBackgrounds(options);
         scanCustomBackgrounds(options);
         bgOptions = options;
-
         if (selectedBgOptionNoScan() == null && !bgOptions.isEmpty()) {
             selectedBgId = bgOptions.getFirst().id;
             uiDirty = true;
         }
     }
-
     private static BgOption selectedBgOptionNoScan() {
         for (BgOption option : bgOptions) {
             if (option.id.equals(selectedBgId)) return option;
         }
         return null;
     }
-
     private static void scanBundledBackgrounds(List<BgOption> options) {
         String basePath = "/skija-test/bg/";
         try {
             var url = MainMenuRenderer.class.getResource(basePath);
             if (url == null) return;
-
             Path dirPath;
             java.nio.file.FileSystem jarFs = null;
             if ("file".equals(url.getProtocol())) {
@@ -754,7 +684,6 @@ public class MainMenuRenderer {
             } else {
                 return;
             }
-
             try (var stream = Files.list(dirPath)) {
                 stream.filter(p -> isImageName(p.getFileName().toString()))
                         .sorted()
@@ -767,7 +696,6 @@ public class MainMenuRenderer {
             SkijaTestClient.LOGGER.error("[SkijaTest] Failed to scan bundled main menu backgrounds", e);
         }
     }
-
     private static void scanCustomBackgrounds(List<BgOption> options) {
         try {
             Path dir = FabricLoader.getInstance().getConfigDir().resolve("skija-test/bg");
@@ -784,12 +712,10 @@ public class MainMenuRenderer {
             SkijaTestClient.LOGGER.error("[SkijaTest] Failed to scan custom main menu backgrounds", e);
         }
     }
-
     private static boolean isImageName(String name) {
         String lower = name.toLowerCase();
         return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp");
     }
-
     private static Typeface font() {
         SkijaTestScreen.ensureFontLoaded();
         if (SkijaTestScreen.curTf != null) return SkijaTestScreen.curTf;
@@ -800,16 +726,13 @@ public class MainMenuRenderer {
         }
         return cachedTf;
     }
-
     private static int textColor() {
         return (255 << 24) | (Math.max(0, Math.min(255, SkijaTestScreen.cR)) << 16) | (Math.max(0, Math.min(255, SkijaTestScreen.cG)) << 8) | Math.max(0, Math.min(255, SkijaTestScreen.cB));
     }
-
     private static int menuStartY(int screenH) {
         int totalH = MENU_KEYS.length * BUTTON_H + (MENU_KEYS.length - 1) * BUTTON_GAP;
         return Math.max(42, (screenH - totalH) / 2);
     }
-
     private static void blitFull(GuiGraphicsExtractor g) {
         float inv = 1f / lastGuiScale;
         var pose = g.pose();
@@ -818,7 +741,6 @@ public class MainMenuRenderer {
         g.blit(RenderPipelines.GUI_TEXTURED, renderer.textureId(), 0, 0, 0f, 0f, renderer.getWidth(), renderer.getHeight(), renderer.getWidth(), renderer.getHeight());
         pose.popMatrix();
     }
-
     private static void blitMenuHover(GuiGraphicsExtractor g, int x, int y) {
         if (menuHoverR == null) return;
         float inv = 1f / lastGuiScale;
@@ -829,7 +751,6 @@ public class MainMenuRenderer {
         g.blit(RenderPipelines.GUI_TEXTURED, menuHoverR.textureId(), 0, 0, 0f, 0f, menuHoverR.getWidth(), menuHoverR.getHeight(), menuHoverR.getWidth(), menuHoverR.getHeight());
         pose.popMatrix();
     }
-
     private static void blitBgSelectorHover(GuiGraphicsExtractor g, int screenW, int screenH) {
         if (bgSelectorHoverR == null) return;
         int x = screenW - BG_SELECTOR_W - BG_SELECTOR_PAD;
@@ -842,7 +763,6 @@ public class MainMenuRenderer {
         g.blit(RenderPipelines.GUI_TEXTURED, bgSelectorHoverR.textureId(), 0, 0, 0f, 0f, bgSelectorHoverR.getWidth(), bgSelectorHoverR.getHeight(), bgSelectorHoverR.getWidth(), bgSelectorHoverR.getHeight());
         pose.popMatrix();
     }
-
     private static void blitBgOptionHover(GuiGraphicsExtractor g, int screenW, int screenH, int rowIndex) {
         if (bgOptionHoverR == null) return;
         int x = screenW - BG_SELECTOR_W - BG_SELECTOR_PAD;
@@ -857,7 +777,6 @@ public class MainMenuRenderer {
         g.blit(RenderPipelines.GUI_TEXTURED, bgOptionHoverR.textureId(), 0, 0, 0f, 0f, bgOptionHoverR.getWidth(), bgOptionHoverR.getHeight(), bgOptionHoverR.getWidth(), bgOptionHoverR.getHeight());
         pose.popMatrix();
     }
-
     private static void closeRenderer() {
         if (renderer != null) {
             renderer.close();
@@ -882,7 +801,6 @@ public class MainMenuRenderer {
         lastSelectorRowHoverName = "";
         closeAvatarRenderer();
     }
-
     private static void closeBackground() {
         if (backgroundTexture != null) {
             try {
@@ -905,6 +823,5 @@ public class MainMenuRenderer {
         backgroundH = 1;
         loadedBgId = "";
     }
-
     private record BgOption(String id, String displayName, String resourcePath, Path filePath) {}
 }

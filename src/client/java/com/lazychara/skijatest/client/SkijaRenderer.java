@@ -1,5 +1,4 @@
 package com.lazychara.skijatest.client;
-
 import com.mojang.blaze3d.platform.NativeImage;
 import io.github.humbleui.skija.*;
 import io.github.humbleui.skija.FontMgr;
@@ -9,15 +8,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.system.MemoryUtil;
-
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
-
 public class SkijaRenderer implements AutoCloseable {
-
     private static final AtomicLong TEXTURE_ID_COUNTER = new AtomicLong();
     private static final Typeface SHARED_DEFAULT_TYPEFACE = FontMgr.getDefault().matchFamilyStyle(null, FontStyle.NORMAL);
-
     private final int width;
     private final int height;
     private Surface surface;
@@ -25,13 +20,10 @@ public class SkijaRenderer implements AutoCloseable {
     private final Identifier textureId;
     private final Typeface defaultTypeface;
     private boolean dirty = true;
-
     private Bitmap sharedBitmap;
     private ImageInfo sharedImageInfo;
-
     private static final float SQUIRCLE_N = 5f;
     private static final int SQUIRCLE_SEGMENTS = 20;
-
     @SuppressWarnings("deprecation")
     public SkijaRenderer(String name, int width, int height) {
         this.width = width;
@@ -43,14 +35,11 @@ public class SkijaRenderer implements AutoCloseable {
         Minecraft.getInstance().getTextureManager().register(textureId, mcTexture);
         this.defaultTypeface = SHARED_DEFAULT_TYPEFACE;
     }
-
     public Canvas canvas() { return surface.getCanvas(); }
-
     public void clear(int argb) {
         surface.getCanvas().clear(argb);
         dirty = true;
     }
-
     public void drawRoundedRect(float x, float y, float w, float h, float radius, int argbColor) {
         RRect rrect = RRect.makeLTRB(x, y, x + w, y + h, radius, radius);
         try (Paint paint = new Paint()) {
@@ -60,7 +49,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawRoundedRectStroke(float x, float y, float w, float h,
                                        float radius, float strokeWidth, int argbColor) {
         RRect rrect = RRect.makeLTRB(x, y, x + w, y + h, radius, radius);
@@ -73,7 +61,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawCircle(float cx, float cy, float radius, int argbColor) {
         try (Paint paint = new Paint()) {
             paint.setColor(argbColor);
@@ -82,26 +69,21 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     private static Path makeSquirclePath(float x, float y, float w, float h, float radius) {
         float r = Math.min(radius, Math.min(w, h) / 2f);
         float n = SQUIRCLE_N;
         float exp = 2f / n;
         int seg = SQUIRCLE_SEGMENTS;
-
         float right = x + w, bottom = y + h;
-
         try (PathBuilder pb = new PathBuilder()) {
             addCorner(pb, right - r, y + r, r, exp, seg, 0, true);
             addCorner(pb, right - r, bottom - r, r, exp, seg, 1, false);
             addCorner(pb, x + r, bottom - r, r, exp, seg, 2, false);
             addCorner(pb, x + r, y + r, r, exp, seg, 3, false);
-
             pb.closePath();
             return pb.detach();
         }
     }
-
     private static void addCorner(PathBuilder pb, float cx, float cy, float r,
                                    float exp, int segments, int corner, boolean first) {
         for (int i = 0; i <= segments; i++) {
@@ -110,7 +92,6 @@ public class SkijaRenderer implements AutoCloseable {
             float sinT = (float) Math.sin(t);
             float sx = Math.signum(cosT) * (float) Math.pow(Math.abs(cosT), exp) * r;
             float sy = Math.signum(sinT) * (float) Math.pow(Math.abs(sinT), exp) * r;
-
             float px, py;
             switch (corner) {
                 case 0: px = cx + sy; py = cy - sx; break;
@@ -119,7 +100,6 @@ public class SkijaRenderer implements AutoCloseable {
                 case 3: px = cx - sx; py = cy - sy; break;
                 default: px = cx; py = cy;
             }
-
             if (first && i == 0) {
                 pb.moveTo(px, py);
                 first = false;
@@ -128,7 +108,6 @@ public class SkijaRenderer implements AutoCloseable {
             }
         }
     }
-
     public void drawSquircle(float x, float y, float w, float h, float radius, int argbColor) {
         try (Path path = makeSquirclePath(x, y, w, h, radius);
              Paint paint = new Paint()) {
@@ -138,7 +117,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawSquircleStroke(float x, float y, float w, float h,
                                     float radius, float strokeWidth, int argbColor) {
         try (Path path = makeSquirclePath(x, y, w, h, radius);
@@ -151,7 +129,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawText(String text, float x, float y, float fontSize, int argbColor) {
         if (defaultTypeface == null) return;
         text = sanitizeText(text);
@@ -165,7 +142,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawText(String text, float x, float y,
                           Typeface typeface, float fontSize, int argbColor) {
         if (typeface == null) { drawText(text, x, y, fontSize, argbColor); return; }
@@ -180,7 +156,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawTextCentered(String text, float centerX, float y, float fontSize, int argbColor) {
         if (defaultTypeface == null) return;
         text = sanitizeText(text);
@@ -195,7 +170,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public void drawTextCentered(String text, float centerX, float y,
                                   Typeface typeface, float fontSize, int argbColor) {
         if (typeface == null) { drawTextCentered(text, centerX, y, fontSize, argbColor); return; }
@@ -211,7 +185,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
-
     public float measureText(String text, Typeface typeface, float fontSize) {
         Typeface tf = typeface != null ? typeface : defaultTypeface;
         if (tf == null) return 0;
@@ -221,7 +194,6 @@ public class SkijaRenderer implements AutoCloseable {
             return font.measureTextWidth(text);
         }
     }
-
     private static String sanitizeText(String text) {
         if (text == null || text.isEmpty()) return "";
         StringBuilder cleaned = null;
@@ -250,7 +222,6 @@ public class SkijaRenderer implements AutoCloseable {
         }
         return cleaned == null ? text : cleaned.toString();
     }
-
     public static String[] getSystemFontFamilies() {
         FontMgr mgr = FontMgr.getDefault();
         int count = mgr.getFamiliesCount();
@@ -260,11 +231,9 @@ public class SkijaRenderer implements AutoCloseable {
         }
         return names;
     }
-
     public static Typeface makeTypeface(String familyName) {
         return FontMgr.getDefault().matchFamilyStyle(familyName, FontStyle.NORMAL);
     }
-
     public static Typeface loadTypeface(String path) {
         try {
             return FontMgr.getDefault().makeFromFile(path);
@@ -273,7 +242,6 @@ public class SkijaRenderer implements AutoCloseable {
             return null;
         }
     }
-
     public static Typeface loadTypefaceFromClasspath(String resourcePath) {
         try (var is = SkijaRenderer.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
@@ -289,21 +257,17 @@ public class SkijaRenderer implements AutoCloseable {
             return null;
         }
     }
-
     public static java.util.LinkedHashMap<String, Typeface> loadAllBundledFonts() {
         java.util.LinkedHashMap<String, Typeface> fonts = new java.util.LinkedHashMap<>();
         String basePath = "/skija-test/fonts/";
-
         try {
             var url = SkijaRenderer.class.getResource(basePath);
             if (url == null) {
                 SkijaTestClient.LOGGER.warn("[SkijaTest] Font dir not found: {}", basePath);
                 return fonts;
             }
-
             java.nio.file.Path dirPath;
             java.nio.file.FileSystem jarFs = null;
-
             if ("file".equals(url.getProtocol())) {
                 dirPath = java.nio.file.Path.of(url.toURI());
             } else if ("jar".equals(url.getProtocol())) {
@@ -317,7 +281,6 @@ public class SkijaRenderer implements AutoCloseable {
             } else {
                 return fonts;
             }
-
             try (var stream = java.nio.file.Files.list(dirPath)) {
                 stream.filter(p -> {
                     String name = p.getFileName().toString().toLowerCase();
@@ -338,44 +301,35 @@ public class SkijaRenderer implements AutoCloseable {
         }
         return fonts;
     }
-
     public void upload() {
         if (!dirty || surface == null || mcTexture == null) return;
-
         if (sharedBitmap == null) {
             sharedImageInfo = ImageInfo.makeN32(width, height, ColorAlphaType.UNPREMUL);
             sharedBitmap = new Bitmap();
             sharedBitmap.allocPixels(sharedImageInfo);
         }
-
         try (Image snapshot = surface.makeImageSnapshot()) {
             snapshot.readPixels(sharedBitmap, 0, 0);
-
             byte[] pixelBytes = sharedBitmap.readPixels(sharedImageInfo, width * 4, 0, 0);
-
             if (pixelBytes != null) {
                 for (int i = 0; i < pixelBytes.length; i += 4) {
                     byte tmp = pixelBytes[i];
                     pixelBytes[i] = pixelBytes[i + 2];
                     pixelBytes[i + 2] = tmp;
                 }
-
                 NativeImage nativeImage = mcTexture.getPixels();
                 ByteBuffer nativeBuf = MemoryUtil.memByteBuffer(nativeImage.getPointer(), pixelBytes.length);
                 nativeBuf.rewind();
                 nativeBuf.put(pixelBytes);
-
                 mcTexture.upload();
             }
         }
         dirty = false;
     }
-
     public Identifier textureId() { return textureId; }
     public int getWidth() { return width; }
     public int getHeight() { return height; }
     public Typeface getDefaultTypeface() { return defaultTypeface; }
-
     @Override
     public void close() {
         if (sharedBitmap != null) { sharedBitmap.close(); sharedBitmap = null; }

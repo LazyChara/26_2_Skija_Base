@@ -1,24 +1,18 @@
 package com.lazychara.skijatest.module;
-
 import com.lazychara.skijatest.client.SkijaTestClient;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
 public class ModuleManager {
     public static final List<Module> modules = new ArrayList<>();
-
     public static void init() {
         try {
             net.fabricmc.loader.api.ModContainer mod = net.fabricmc.loader.api.FabricLoader.getInstance()
                     .getModContainer("skija-test").orElse(null);
-
             if (mod == null) {
                 SkijaTestClient.LOGGER.error("[SkijaTest] 他妈的没有模块");
                 return;
             }
-
             for (java.nio.file.Path root : mod.getRootPaths()) {
                 java.nio.file.Path moduleDir = root.resolve("com/lazychara/skijatest/module");
                 if (java.nio.file.Files.exists(moduleDir)) {
@@ -45,7 +39,6 @@ public class ModuleManager {
             SkijaTestClient.LOGGER.error("[SkijaTest] Failed to load modules", e);
         }
     }
-
     public static List<Module> getModulesByCategory(Category category) {
         return modules.stream().filter(m -> m.category == category).collect(Collectors.toList());
     }
