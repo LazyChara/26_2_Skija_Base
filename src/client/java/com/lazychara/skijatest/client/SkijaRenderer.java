@@ -11,8 +11,12 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SkijaRenderer implements AutoCloseable {
+
+    private static final AtomicLong TEXTURE_ID_COUNTER = new AtomicLong();
+    private static final Typeface SHARED_DEFAULT_TYPEFACE = FontMgr.getDefault().matchFamilyStyle(null, FontStyle.NORMAL);
 
     private final int width;
     private final int height;
@@ -35,9 +39,9 @@ public class SkijaRenderer implements AutoCloseable {
         this.surface = Surface.makeRasterN32Premul(width, height);
         NativeImage nativeImage = new NativeImage(width, height, true);
         this.mcTexture = new DynamicTexture(() -> "skija-renderer", nativeImage);
-        this.textureId = Identifier.parse("skija-test:" + name);
+        this.textureId = Identifier.parse("skija-test:" + name + "_" + TEXTURE_ID_COUNTER.incrementAndGet());
         Minecraft.getInstance().getTextureManager().register(textureId, mcTexture);
-        this.defaultTypeface = FontMgr.getDefault().matchFamilyStyle(null, FontStyle.NORMAL);
+        this.defaultTypeface = SHARED_DEFAULT_TYPEFACE;
     }
 
     public Canvas canvas() { return surface.getCanvas(); }
@@ -87,15 +91,15 @@ public class SkijaRenderer implements AutoCloseable {
 
         float right = x + w, bottom = y + h;
 
-        PathBuilder pb = new PathBuilder();
+        try (PathBuilder pb = new PathBuilder()) {
+            addCorner(pb, right - r, y + r, r, exp, seg, 0, true);
+            addCorner(pb, right - r, bottom - r, r, exp, seg, 1, false);
+            addCorner(pb, x + r, bottom - r, r, exp, seg, 2, false);
+            addCorner(pb, x + r, y + r, r, exp, seg, 3, false);
 
-        addCorner(pb, right - r, y + r, r, exp, seg, 0, true);
-        addCorner(pb, right - r, bottom - r, r, exp, seg, 1, false);
-        addCorner(pb, x + r, bottom - r, r, exp, seg, 2, false);
-        addCorner(pb, x + r, y + r, r, exp, seg, 3, false);
-
-        pb.closePath();
-        return pb.detach();
+            pb.closePath();
+            return pb.detach();
+        }
     }
 
     private static void addCorner(PathBuilder pb, float cx, float cy, float r,
@@ -276,8 +280,10 @@ public class SkijaRenderer implements AutoCloseable {
                 SkijaTestClient.LOGGER.error("Font resource not found: {}", resourcePath);
                 return null;
             }
-            byte[] data = is.readAllBytes();
-            return FontMgr.getDefault().makeFromData(Data.makeFromBytes(data));
+            byte[] bytes = is.readAllBytes();
+            try (Data data = Data.makeFromBytes(bytes)) {
+                return FontMgr.getDefault().makeFromData(data);
+            }
         } catch (Exception e) {
             SkijaTestClient.LOGGER.error("Failed to load typeface from classpath: {}", resourcePath, e);
             return null;
@@ -374,6 +380,17 @@ public class SkijaRenderer implements AutoCloseable {
     public void close() {
         if (sharedBitmap != null) { sharedBitmap.close(); sharedBitmap = null; }
         if (surface != null) { surface.close(); surface = null; }
-        if (mcTexture != null) { mcTexture.close(); mcTexture = null; }
+        if (mcTexture != null) {
+            try {
+                Minecraft.getInstance().getTextureManager().release(textureId);
+            } catch (Exception e) {
+                try {
+                    mcTexture.close();
+                } catch (Exception ignored) {
+                }
+            } finally {
+                mcTexture = null;
+            }
+        }
     }
 }

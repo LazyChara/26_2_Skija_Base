@@ -885,8 +885,20 @@ public class MainMenuRenderer {
 
     private static void closeBackground() {
         if (backgroundTexture != null) {
-            backgroundTexture.close();
-            backgroundTexture = null;
+            try {
+                if (backgroundTextureId != null) {
+                    Minecraft.getInstance().getTextureManager().release(backgroundTextureId);
+                } else {
+                    backgroundTexture.close();
+                }
+            } catch (Exception e) {
+                try {
+                    backgroundTexture.close();
+                } catch (Exception ignored) {
+                }
+            } finally {
+                backgroundTexture = null;
+            }
         }
         backgroundTextureId = null;
         backgroundW = 1;

@@ -54,6 +54,8 @@ public class HudManager {
     private static String lastNotificationText = "";
     private static int lastMainTextColor = 0;
     private static boolean lastEditing = false;
+    private static boolean lastXyzEnabled = false;
+    private static boolean lastPotionsEnabled = false;
     private static long lastMainFpsTextureUpdateMs = 0L;
     private static String lastXyzText = "";
     private static String lastPotionKey = "";
@@ -125,19 +127,34 @@ public class HudManager {
                 if (currentTextColor != lastMainTextColor) {
                     mainFpsTextDirty = true;
                     mainNotifTextDirty = true;
+                    xyzDirty = true;
+                    potionDirty = true;
                     lastMainTextColor = currentTextColor;
                 }
                 if (!NotificationManager.currentNotification.equals(lastNotificationText)) {
                     mainNotifTextDirty = true;
                     lastNotificationText = NotificationManager.currentNotification;
                 }
+
+                boolean xyzEnabled = hudModule.xyz.value;
+                boolean potionsEnabled = hudModule.potions.value;
+                if (xyzEnabled != lastXyzEnabled) {
+                    xyzDirty = true;
+                    lastXyzEnabled = xyzEnabled;
+                }
+                if (potionsEnabled != lastPotionsEnabled) {
+                    potionDirty = true;
+                    lastPotionsEnabled = potionsEnabled;
+                }
                 if (editing != lastEditing) {
                     mainBgDirty = true;
+                    xyzDirty = true;
+                    potionDirty = true;
                     lastEditing = editing;
                 }
 
                 String xyzText = makeXyzText(mc);
-                if (!xyzText.equals(lastXyzText) || editing) {
+                if (!xyzText.equals(lastXyzText)) {
                     xyzDirty = true;
                     lastXyzText = xyzText;
                 }
@@ -150,7 +167,7 @@ public class HudManager {
                     recreatePotionRenderer(guiScale, potionRows);
                     potionDirty = true;
                 }
-                if (!potionKey.equals(lastPotionKey) || editing) {
+                if (!potionKey.equals(lastPotionKey)) {
                     potionDirty = true;
                     lastPotionKey = potionKey;
                 }
@@ -168,11 +185,11 @@ public class HudManager {
                     mainNotifTextDirty = false;
                 }
                 if (xyzDirty) {
-                    renderXyz(guiScale, editing, hudModule.xyz.value, xyzText);
+                    renderXyz(guiScale, editing, xyzEnabled, xyzText);
                     xyzDirty = false;
                 }
                 if (potionDirty) {
-                    renderPotions(guiScale, editing, hudModule.potions.value, effects);
+                    renderPotions(guiScale, editing, potionsEnabled, effects);
                     potionDirty = false;
                 }
 

@@ -23,7 +23,8 @@ public class SkijaTestScreen extends Screen {
     private static final int W100 = 0xFFFFFFFF, W70 = 0xB3FFFFFF, W50 = 0x80FFFFFF;
     private static final int W30 = 0x4DFFFFFF, W15 = 0x26FFFFFF, W08 = 0x14FFFFFF, SEP = 0x1AFFFFFF;
 
-    private SkijaRenderer panelR, ddR, moduleR;
+    private static SkijaRenderer panelR, ddR, moduleR, expandedModuleR;
+    private static int cachedRendererGuiScale = -1;
     private static String[] fonts;
     private static java.util.LinkedHashMap<String, Typeface> bundled;
     private static int selIdx = 0;
@@ -44,6 +45,8 @@ public class SkijaTestScreen extends Screen {
     private boolean panelDirty = true;
     private boolean ddDirty = true;
     private boolean moduleDirty = true;
+    private boolean expandedModuleDirty = true;
+    private String lastExpandedModuleName = "";
     private boolean lastHoverHeader = false;
     private int lastHoverRow = -1;
 
@@ -54,17 +57,16 @@ public class SkijaTestScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        if (panelR != null)
-            panelR.close();
-        if (ddR != null)
-            ddR.close();
-        if (moduleR != null)
-            moduleR.close();
 
         guiScale = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
-        panelR = new SkijaRenderer("skija_panel", (PANEL_W + 4) * guiScale, (PANEL_H + 4) * guiScale);
-        ddR = new SkijaRenderer("skija_dd", (DD_W + 4) * guiScale, (DD_MAX_H + 4) * guiScale);
-        moduleR = new SkijaRenderer("skija_module", (MODULE_W + 4) * guiScale, (MODULE_H + 4) * guiScale);
+        if (panelR == null || ddR == null || moduleR == null || expandedModuleR == null || cachedRendererGuiScale != guiScale) {
+            closeCachedRenderers();
+            panelR = new SkijaRenderer("skija_panel", (PANEL_W + 4) * guiScale, (PANEL_H + 4) * guiScale);
+            ddR = new SkijaRenderer("skija_dd", (DD_W + 4) * guiScale, (DD_MAX_H + 4) * guiScale);
+            moduleR = new SkijaRenderer("skija_module", (MODULE_W + 4) * guiScale, (MODULE_H + 4) * guiScale);
+            expandedModuleR = new SkijaRenderer("skija_expanded_module", (MODULE_W - 8) * guiScale, (MODULE_H - 8) * guiScale);
+            cachedRendererGuiScale = guiScale;
+        }
 
         if (fonts == null) {
             ensureFontLoaded();
@@ -81,6 +83,8 @@ public class SkijaTestScreen extends Screen {
         panelDirty = true;
         ddDirty = true;
         moduleDirty = true;
+        expandedModuleDirty = true;
+        lastExpandedModuleName = "";
     }
 
     public static void ensureFontLoaded() {
@@ -106,8 +110,9 @@ public class SkijaTestScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor g, int mx, int my, float a) {
-        this.extractBlurredBackground(g);
-        this.extractTransparentBackground(g);
+        // Vanilla blur is expensive because it runs a fullscreen post-process while this
+        // screen is open. A simple dim overlay keeps the UI readable without tanking FPS.
+        g.fill(0, 0, this.width, this.height, 0x66000000);
     }
 
     @Override
@@ -144,9 +149,6 @@ public class SkijaTestScreen extends Screen {
                     animatingModule = true;
                 }
             }
-            if (animatingModule) {
-                moduleDirty = true;
-            }
 
             handleMouse(mx, my);
 
@@ -163,8 +165,25 @@ public class SkijaTestScreen extends Screen {
                 moduleDirty = false;
             }
 
+            com.lazychara.skijatest.module.Module expandedModule = currentExpandedModule();
+            if (expandedModule != null) {
+                if (!expandedModule.name.equals(lastExpandedModuleName)) {
+                    expandedModuleDirty = true;
+                    lastExpandedModuleName = expandedModule.name;
+                }
+                if (expandedModuleDirty) {
+                    renderExpandedModule(expandedModule);
+                    expandedModuleDirty = false;
+                }
+            } else {
+                lastExpandedModuleName = "";
+            }
+
             blitRegion(g, panelR, panelX - 2, panelY - 2, PANEL_W + 4, PANEL_H + 4);
             blitRegion(g, moduleR, moduleX - 2, moduleY - 2, MODULE_W + 4, MODULE_H + 4);
+            if (expandedModule != null) {
+                blitExpandedModule(g, expandedModule);
+            }
 
             float t = 1f - (1f - ddAnim) * (1f - ddAnim) * (1f - ddAnim);
             int visRows = Math.min(DD_MAX_ROWS, fonts.length);
@@ -315,99 +334,105 @@ public class SkijaTestScreen extends Screen {
         moduleR.drawSquircle(ox, oy, MODULE_W, MODULE_H, CORNER_R, BG);
         moduleR.drawSquircleStroke(ox, oy, MODULE_W, MODULE_H, CORNER_R, 1.5f, BORDER);
 
-        float baseAlphaT = 1f;
-        for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
-            if (mod.expandAnim > 0f) {
-                float t = 1f - (1f - mod.expandAnim) * (1f - mod.expandAnim) * (1f - mod.expandAnim);
-                baseAlphaT = Math.max(0f, 1f - t * 1.5f);
-                break;
+        float itemY = oy + 12;
+        if (curTf != null) {
+            for (com.lazychara.skijatest.module.Category cat : com.lazychara.skijatest.module.Category.values()) {
+                java.util.List<com.lazychara.skijatest.module.Module> mods = com.lazychara.skijatest.module.ModuleManager
+                        .getModulesByCategory(cat);
+                if (mods.isEmpty()) continue;
+
+                moduleR.drawTextCentered(cat.name, cx, itemY + 8, curTf, 13f, W70);
+                itemY += 28;
+
+                for (com.lazychara.skijatest.module.Module mod : mods) {
+                    mod.originX = ox + PAD;
+                    mod.originY = itemY;
+
+                    int color = mod.enabled ? textColor() : W50;
+                    moduleR.drawText(mod.name, ox + PAD, itemY + 10, curTf, 11f, color);
+                    itemY += 16;
+                }
+                itemY += 8;
             }
         }
-
-        if (baseAlphaT > 0f) {
-            float itemY = oy + 12;
-            if (curTf != null) {
-                for (com.lazychara.skijatest.module.Category cat : com.lazychara.skijatest.module.Category.values()) {
-                    java.util.List<com.lazychara.skijatest.module.Module> mods = com.lazychara.skijatest.module.ModuleManager
-                            .getModulesByCategory(cat);
-                    if (mods.isEmpty())
-                        continue;
-
-                    moduleR.drawTextCentered(cat.name, cx, itemY + 8, curTf, 13f, blendAlpha(W70, baseAlphaT));
-                    itemY += 28;
-
-                    for (com.lazychara.skijatest.module.Module mod : mods) {
-                        mod.originX = ox + PAD;
-                        mod.originY = itemY;
-
-                        int color = mod.enabled ? textColor() : W50;
-                        moduleR.drawText(mod.name, ox + PAD, itemY + 10, curTf, 11f, blendAlpha(color, baseAlphaT));
-                        itemY += 16;
-                    }
-                    itemY += 8;
-                }
-            }
-        }
-
-        for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
-                if (mod.expandAnim > 0.01f) {
-                    float t = 1f - (1f - mod.expandAnim) * (1f - mod.expandAnim) * (1f - mod.expandAnim);
-
-                    int bgAlpha = Math.round(t * 120);
-                    moduleR.drawRoundedRect(ox, oy, MODULE_W, MODULE_H, CORNER_R, (bgAlpha << 24) | 0x000000);
-
-                    float targetW = MODULE_W - 8;
-                    float targetH = MODULE_H - 8;
-                    float targetX = ox + 4;
-                    float targetY = oy + 4;
-
-                    float currX = mod.originX + (targetX - mod.originX) * t;
-                    float currY = mod.originY + (targetY - mod.originY) * t;
-                    float currW = (MODULE_W - 2 * PAD) + (targetW - (MODULE_W - 2 * PAD)) * t;
-                    float currH = 16f + (targetH - 16f) * t;
-
-                    int cardAlpha = Math.round(t * 255);
-                    int cardBg = (cardAlpha << 24) | 0x2A2A2A;
-                    int cardStroke = (cardAlpha << 24) | 0x444444;
-
-                    moduleR.drawRoundedRect(currX, currY, currW, currH, CORNER_R - 2f, cardBg);
-                    moduleR.drawRoundedRectStroke(currX, currY, currW, currH, CORNER_R - 2f, 1.5f, cardStroke);
-
-                    c.save();
-                    c.clipRect(io.github.humbleui.types.Rect.makeXYWH(currX, currY, currW, currH));
-
-                    if (t > 0.3f) {
-                        float contentAlpha = Math.min(1f, (t - 0.3f) / 0.7f);
-                        int textCol = (Math.round(contentAlpha * 255) << 24) | (textColor() & 0xFFFFFF);
-                        int dimCol = (Math.round(contentAlpha * 170) << 24) | 0xFFFFFF;
-
-                        moduleR.drawTextCentered(mod.name, currX + currW / 2f, currY + 14, curTf, 13f, textCol);
-
-                        c.save();
-                        c.clipRect(io.github.humbleui.types.Rect.makeXYWH(currX, currY + 28, currW, currH - 32));
-                        float sy = currY + 28 - settingScroll;
-
-                        String bindText = mod.isBinding ? "..." : (mod.keybind == -1 ? "NONE" : org.lwjgl.glfw.GLFW.glfwGetKeyName(mod.keybind, 0));
-                        if (bindText == null) bindText = "K" + mod.keybind;
-                        moduleR.drawText("Bind: " + bindText, currX + 14, sy + 14, curTf, 11f, mod.isBinding ? textCol : dimCol);
-                        sy += 22;
-
-                        for (com.lazychara.skijatest.module.Setting s : mod.settings) {
-                            if (s instanceof com.lazychara.skijatest.module.BooleanSetting bs) {
-                                moduleR.drawText(s.name, currX + 14, sy + 14, curTf, 11f, bs.value ? textCol : dimCol);
-                            }
-                            sy += 22;
-                        }
-                        c.restore();
-                    } else {
-                        moduleR.drawText(mod.name, currX + 6, currY + 12, curTf, 11f, textColor());
-                    }
-                    c.restore();
-                }
-            }
 
         c.restore();
         moduleR.upload();
+    }
+
+    private void renderExpandedModule(com.lazychara.skijatest.module.Module mod) {
+        if (expandedModuleR == null) return;
+        expandedModuleR.clear(0x00000000);
+        var c = expandedModuleR.canvas();
+        c.save();
+        c.scale(guiScale, guiScale);
+
+        float w = MODULE_W - 8;
+        float h = MODULE_H - 8;
+        expandedModuleR.drawRoundedRect(0, 0, w, h, CORNER_R - 2f, 0xFF2A2A2A);
+        expandedModuleR.drawRoundedRectStroke(0, 0, w, h, CORNER_R - 2f, 1.5f, 0xFF444444);
+
+        int textCol = textColor();
+        expandedModuleR.drawTextCentered(mod.name, w / 2f, 14, curTf, 13f, textCol);
+
+        c.save();
+        c.clipRect(io.github.humbleui.types.Rect.makeXYWH(0, 28, w, h - 32));
+        float sy = 28 - settingScroll;
+
+        String bindText = mod.isBinding ? "..." : (mod.keybind == -1 ? "NONE" : org.lwjgl.glfw.GLFW.glfwGetKeyName(mod.keybind, 0));
+        if (bindText == null) bindText = "K" + mod.keybind;
+        expandedModuleR.drawText("Bind: " + bindText, 14, sy + 14, curTf, 11f, mod.isBinding ? textCol : 0xAAFFFFFF);
+        sy += 22;
+
+        for (com.lazychara.skijatest.module.Setting s : mod.settings) {
+            if (s instanceof com.lazychara.skijatest.module.BooleanSetting bs) {
+                expandedModuleR.drawText(s.name, 14, sy + 14, curTf, 11f, bs.value ? textCol : 0xAAFFFFFF);
+            }
+            sy += 22;
+        }
+        c.restore();
+
+        c.restore();
+        expandedModuleR.upload();
+    }
+
+    private com.lazychara.skijatest.module.Module currentExpandedModule() {
+        for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
+            if (mod.expandAnim > 0.01f || mod.expanded) return mod;
+        }
+        return null;
+    }
+
+    private void blitExpandedModule(GuiGraphicsExtractor g, com.lazychara.skijatest.module.Module mod) {
+        if (expandedModuleR == null) return;
+        float t = 1f - (1f - mod.expandAnim) * (1f - mod.expandAnim) * (1f - mod.expandAnim);
+        float targetW = MODULE_W - 8;
+        float targetH = MODULE_H - 8;
+        float targetX = moduleX + 4;
+        float targetY = moduleY + 4;
+
+        float startX = moduleX + mod.originX;
+        float startY = moduleY + mod.originY;
+        float startW = MODULE_W - 2 * PAD;
+        float startH = 16f;
+
+        float currX = startX + (targetX - startX) * t;
+        float currY = startY + (targetY - startY) * t;
+        float currW = startW + (targetW - startW) * t;
+        float currH = startH + (targetH - startH) * t;
+
+        int texW = expandedModuleR.getWidth();
+        int texH = expandedModuleR.getHeight();
+        float scaleX = currW / targetW;
+        float scaleY = currH / targetH;
+        float inv = 1f / guiScale;
+
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(currX, currY);
+        pose.scale(scaleX * inv, scaleY * inv);
+        g.blit(RenderPipelines.GUI_TEXTURED, expandedModuleR.textureId(), 0, 0, 0f, 0f, texW, texH, texW, texH);
+        pose.popMatrix();
     }
 
     private void drawSlider(SkijaRenderer r, float x, float y, float w, int val, int col, String lbl) {
@@ -465,6 +490,7 @@ public class SkijaTestScreen extends Screen {
                     ddDirty = true;
                     panelDirty = true;
                     moduleDirty = true;
+                    expandedModuleDirty = true;
                     clicked = true;
                 }
                 if (!clicked && !isInsideDD(mx, my)) {
@@ -486,7 +512,7 @@ public class SkijaTestScreen extends Screen {
                             float sy = targetY + 28 - settingScroll;
                             if (my >= sy && my <= sy + 20) {
                                 mod.isBinding = !mod.isBinding;
-                                moduleDirty = true;
+                                expandedModuleDirty = true;
                                 com.lazychara.skijatest.config.ConfigManager.save();
                             }
                             sy += 22;
@@ -494,7 +520,7 @@ public class SkijaTestScreen extends Screen {
                                 if (my >= sy && my <= sy + 20) {
                                     if (s instanceof com.lazychara.skijatest.module.BooleanSetting bs) {
                                         bs.toggle();
-                                        moduleDirty = true;
+                                        expandedModuleDirty = true;
                                         com.lazychara.skijatest.config.ConfigManager.save();
                                     }
                                 }
@@ -505,7 +531,7 @@ public class SkijaTestScreen extends Screen {
                         mod.expanded = false;
                         mod.isBinding = false;
                         settingScroll = 0f;
-                        moduleDirty = true;
+                        expandedModuleDirty = true;
                     }
                     handledOverlay = true;
                     break;
@@ -526,8 +552,10 @@ public class SkijaTestScreen extends Screen {
                                 && my <= currentY + 16) {
                             if (rightClick) {
                                 mod.expanded = true;
+                                expandedModuleDirty = true;
                             } else if (leftClick) {
                                 mod.toggle();
+                                moduleDirty = true;
                             }
                             moduleDirty = true;
                             break;
@@ -568,6 +596,7 @@ public class SkijaTestScreen extends Screen {
             if (cR != oldR || cG != oldG || cB != oldB) {
                 panelDirty = true;
                 moduleDirty = true;
+                expandedModuleDirty = true;
             }
         }
         wasLeftDown = leftDown;
@@ -587,7 +616,7 @@ public class SkijaTestScreen extends Screen {
                     float maxScroll = Math.max(0, contentH - (targetH - 32f));
                     settingScroll -= sy * 20f;
                     settingScroll = Math.max(0, Math.min(maxScroll, settingScroll));
-                    moduleDirty = true;
+                    expandedModuleDirty = true;
                     return true;
                 }
             }
@@ -641,6 +670,13 @@ public class SkijaTestScreen extends Screen {
     @Override
     public void removed() {
         super.removed();
+        // Keep the Skija textures alive and reuse them on the next open. Closing them
+        // during a screen transition can stall/dirty the vanilla GUI pipeline that opens
+        // immediately afterwards, such as the pause menu.
+        SkijaTestClient.runAfterClientTicks(20, com.lazychara.skijatest.config.ConfigManager::save);
+    }
+
+    private static void closeCachedRenderers() {
         if (panelR != null) {
             panelR.close();
             panelR = null;
@@ -653,7 +689,11 @@ public class SkijaTestScreen extends Screen {
             moduleR.close();
             moduleR = null;
         }
-        com.lazychara.skijatest.config.ConfigManager.save();
+        if (expandedModuleR != null) {
+            expandedModuleR.close();
+            expandedModuleR = null;
+        }
+        cachedRendererGuiScale = -1;
     }
 
     @Override
@@ -671,7 +711,7 @@ public class SkijaTestScreen extends Screen {
                     mod.keybind = e.key();
                 }
                 mod.isBinding = false;
-                moduleDirty = true;
+                expandedModuleDirty = true;
                 com.lazychara.skijatest.config.ConfigManager.save();
                 return true;
             }
@@ -682,11 +722,12 @@ public class SkijaTestScreen extends Screen {
             for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
                 if (mod.expanded) {
                     mod.expanded = false;
+                    mod.isBinding = false;
+                    expandedModuleDirty = true;
                     closedSecondary = true;
                 }
             }
             if (closedSecondary) {
-                moduleDirty = true;
                 return true;
             }
         }
