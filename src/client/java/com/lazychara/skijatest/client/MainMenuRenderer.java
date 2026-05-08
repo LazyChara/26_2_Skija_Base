@@ -698,7 +698,7 @@ public class MainMenuRenderer {
     }
     private static void scanCustomBackgrounds(List<BgOption> options) {
         try {
-            Path dir = FabricLoader.getInstance().getConfigDir().resolve("skija-test/bg");
+            Path dir = FabricLoader.getInstance().getGameDir().resolve("lazychara/bg");
             Files.createDirectories(dir);
             try (var stream = Files.list(dir)) {
                 stream.filter(p -> Files.isRegularFile(p) && isImageName(p.getFileName().toString()))

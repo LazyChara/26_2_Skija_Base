@@ -14,9 +14,15 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 public class ConfigManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final File CONFIG_FILE = new File(FabricLoader.getInstance().getConfigDir().toFile(), "skijatest.json");
+    private static final Path LAZYCHARA_DIR = FabricLoader.getInstance().getGameDir().resolve("lazychara");
+    private static final File CONFIG_FILE = LAZYCHARA_DIR.resolve("skijatest.json").toFile();
+    static {
+        try { Files.createDirectories(LAZYCHARA_DIR); } catch (Exception ignored) {}
+    }
     public static void save() {
         try {
             JsonObject root = new JsonObject();
