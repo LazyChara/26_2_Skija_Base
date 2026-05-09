@@ -8,3 +8,6 @@ Love from Eatgrapes for Vulkan support in Skija
 - 一个车轮子而已，车自己造
 - 代码质量有点低下，未必有ai写得好，不喜欢就别用
 - 至于怎么用？你都来看车轮子了你还问我？
+
+## 致谢
+- 感谢[AMLL Player](https://github.com/amll-dev/applemusic-like-lyrics)提供的灵感与思路
