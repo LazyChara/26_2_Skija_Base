@@ -13,6 +13,9 @@ public class SkijaTestScreen extends Screen {
     private static final int DD_W = 160, DD_COLLAPSED_H = 24, DD_ROW_H = 18, DD_MAX_ROWS = 8;
     private static final int DD_GAP = 10;
     private static final int DD_MAX_H = DD_COLLAPSED_H + DD_MAX_ROWS * DD_ROW_H + 6;
+    private static final long OPEN_TRANSITION_MS = 320L;
+    private static final long CLOSE_TRANSITION_MS = 260L;
+    private static final long MUSIC_TRANSITION_MS = 360L;
     private static final int MODULE_W = 140, MODULE_H = 240;
     private static final int BG = 0x40FFFFFF, BORDER = 0x66FFFFFF;
     private static final int W100 = 0xFFFFFFFF, W70 = 0xB3FFFFFF, W50 = 0x80FFFFFF;
@@ -34,6 +37,11 @@ public class SkijaTestScreen extends Screen {
     private float ddAnim = 0f;
     private int ddScroll = 0;
     private long lastTime = 0;
+    private long openTransitionStart = 0L;
+    private boolean closeTransitioning = false;
+    private long closeTransitionStart = 0L;
+    private boolean musicTransitioning = false;
+    private long musicTransitionStart = 0L;
     private boolean panelDirty = true;
     private boolean ddDirty = true;
     private boolean moduleDirty = true;
@@ -71,6 +79,11 @@ public class SkijaTestScreen extends Screen {
         moduleDirty = true;
         expandedModuleDirty = true;
         lastExpandedModuleName = "";
+        openTransitionStart = System.currentTimeMillis();
+        closeTransitioning = false;
+        closeTransitionStart = 0L;
+        musicTransitioning = false;
+        musicTransitionStart = 0L;
     }
     public static void ensureFontLoaded() {
         if (fonts != null) return;
@@ -105,6 +118,14 @@ public class SkijaTestScreen extends Screen {
                 lastTime = now;
             float dt = (now - lastTime) / 1000f;
             lastTime = now;
+            if (musicTransitioning && now - musicTransitionStart >= MUSIC_TRANSITION_MS) {
+                Minecraft.getInstance().gui.setScreen(new Musicpage());
+                return;
+            }
+            if (closeTransitioning && now - closeTransitionStart >= CLOSE_TRANSITION_MS) {
+                Minecraft.getInstance().gui.setScreen(null);
+                return;
+            }
             float speed = 7.0f;
             if (dropdownOpen) {
                 if (ddAnim < 1f) {
@@ -127,7 +148,7 @@ public class SkijaTestScreen extends Screen {
                     animatingModule = true;
                 }
             }
-            handleMouse(mx, my);
+            if (!musicTransitioning && !closeTransitioning) handleMouse(mx, my);
             if (panelDirty) {
                 renderPanel();
                 panelDirty = false;
@@ -153,6 +174,10 @@ public class SkijaTestScreen extends Screen {
             } else {
                 lastExpandedModuleName = "";
             }
+            float openT = openTransitionProgress(now);
+            float closeT = closeTransitioning ? closeTransitionProgress(now) : 0f;
+            float musicT = musicTransitioning ? musicTransitionProgress(now) : 0f;
+            pushScreenTransitionPose(g, openT, closeT, musicT);
             blitRegion(g, panelR, panelX - 2, panelY - 2, PANEL_W + 4, PANEL_H + 4);
             blitRegion(g, moduleR, moduleX - 2, moduleY - 2, MODULE_W + 4, MODULE_H + 4);
             if (expandedModule != null) {
@@ -163,10 +188,52 @@ public class SkijaTestScreen extends Screen {
             int fullH = DD_COLLAPSED_H + visRows * DD_ROW_H + 6;
             float animH = DD_COLLAPSED_H + (fullH - DD_COLLAPSED_H) * t;
             blitRegion(g, ddR, ddX - 2, ddY - 2, DD_W + 4, Math.round(animH) + 4);
+            popScreenTransitionPose(g);
+            drawScreenTransitionOverlay(g, openT, closeT, musicT);
         } catch (Exception e) {
             SkijaTestClient.LOGGER.error("[SkijaTest] Render error!", e);
         }
         super.extractRenderState(g, mx, my, delta);
+    }
+    private float openTransitionProgress(long now) {
+        return Math.max(0f, Math.min(1f, (now - openTransitionStart) / (float) OPEN_TRANSITION_MS));
+    }
+    private float closeTransitionProgress(long now) {
+        return Math.max(0f, Math.min(1f, (now - closeTransitionStart) / (float) CLOSE_TRANSITION_MS));
+    }
+    private float musicTransitionProgress(long now) {
+        return Math.max(0f, Math.min(1f, (now - musicTransitionStart) / (float) MUSIC_TRANSITION_MS));
+    }
+    private void pushScreenTransitionPose(GuiGraphicsExtractor g, float openT, float closeT, float musicT) {
+        float openE = easeOutCubic(openT);
+        float closeE = easeInOut(closeT);
+        float musicE = easeOutCubic(musicT);
+        float scale = (0.965f + 0.035f * openE) * (1f - 0.075f * musicE) * (1f - 0.055f * closeE);
+        float y = 22f * (1f - openE) - 44f * musicE + 18f * closeE;
+        var pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(width * 0.5f, height * 0.5f + y);
+        pose.scale(scale, scale);
+        pose.translate(-width * 0.5f, -height * 0.5f);
+    }
+    private void popScreenTransitionPose(GuiGraphicsExtractor g) {
+        g.pose().popMatrix();
+    }
+    private void drawScreenTransitionOverlay(GuiGraphicsExtractor g, float openT, float closeT, float musicT) {
+        float openA = 150f * (1f - easeInOut(openT));
+        float closeA = 205f * easeInOut(closeT);
+        float musicA = 230f * easeInOut(musicT);
+        int a = Math.max(0, Math.min(240, Math.round(Math.max(openA, Math.max(closeA, musicA)))));
+        if (a > 0) g.fill(0, 0, width, height, a << 24);
+    }
+    private float easeOutCubic(float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        float u = 1f - t;
+        return 1f - u * u * u;
+    }
+    private float easeInOut(float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        return t < 0.5f ? 2f * t * t : 1f - (float) Math.pow(-2f * t + 2f, 2f) * 0.5f;
     }
     private void blitRegion(GuiGraphicsExtractor g, SkijaRenderer r, int dx, int dy, int guiW, int guiH) {
         int regionW = guiW * guiScale;
@@ -527,6 +594,7 @@ public class SkijaTestScreen extends Screen {
     }
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+        if (musicTransitioning || closeTransitioning) return true;
         for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
             if (mod.expandAnim > 0.5f) {
                 float targetW = MODULE_W - 8;
@@ -551,7 +619,40 @@ public class SkijaTestScreen extends Screen {
                 ddDirty = true;
             return true;
         }
+        if (isBlankAreaForMusicPage(mx, my) && sy < 0) {
+            startMusicTransition();
+            return true;
+        }
         return super.mouseScrolled(mx, my, sx, sy);
+    }
+    private void startMusicTransition() {
+        if (musicTransitioning || closeTransitioning) return;
+        musicTransitioning = true;
+        musicTransitionStart = System.currentTimeMillis();
+        dropdownOpen = false;
+        ddDirty = true;
+    }
+    private void startCloseTransition() {
+        if (closeTransitioning || musicTransitioning) return;
+        closeTransitioning = true;
+        closeTransitionStart = System.currentTimeMillis();
+        dropdownOpen = false;
+        ddDirty = true;
+    }
+    private boolean isBlankAreaForMusicPage(double mx, double my) {
+        if (mx >= panelX && mx <= panelX + PANEL_W && my >= panelY && my <= panelY + PANEL_H) return false;
+        if (mx >= moduleX && mx <= moduleX + MODULE_W && my >= moduleY && my <= moduleY + MODULE_H) return false;
+        if (isInsideDD((int) mx, (int) my)) return false;
+        for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {
+            if (mod.expandAnim > 0.1f) {
+                float targetW = MODULE_W - 8;
+                float targetH = MODULE_H - 8;
+                float targetX = moduleX + 4;
+                float targetY = moduleY + 4;
+                if (mx >= targetX && mx <= targetX + targetW && my >= targetY && my <= targetY + targetH) return false;
+            }
+        }
+        return true;
     }
     private void ensureVisible() {
         if (selIdx < ddScroll)
@@ -582,6 +683,10 @@ public class SkijaTestScreen extends Screen {
         return mx >= ddX && mx <= ddX + DD_W && my >= ddY && my <= ddY + h;
     }
     @Override
+    public void onClose() {
+        startCloseTransition();
+    }
+    @Override
     public void removed() {
         super.removed();
         SkijaTestClient.runAfterClientTicks(20, com.lazychara.skijatest.config.ConfigManager::save);
@@ -607,8 +712,9 @@ public class SkijaTestScreen extends Screen {
     }
     @Override
     public boolean keyPressed(KeyEvent e) {
+        if (musicTransitioning || closeTransitioning) return true;
         if (e.key() == GLFW.GLFW_KEY_RIGHT_SHIFT) {
-            this.onClose();
+            startCloseTransition();
             return true;
         }
         for (com.lazychara.skijatest.module.Module mod : com.lazychara.skijatest.module.ModuleManager.modules) {

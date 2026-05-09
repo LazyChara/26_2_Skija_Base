@@ -23,17 +23,18 @@ loom {
 }
 
 dependencies {
-    // Minecraft
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
-    // Fabric Loader
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    // Fabric API
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-    // Skija - Windows x64 native bindings (includes Vulkan backend)
     implementation "io.github.humbleui:skija-windows-x64:${project.skija_version}"
+
+    implementation "net.jthink:jaudiotagger:3.0.1"
+
+    implementation "com.googlecode.soundlibs:mp3spi:1.9.5.4"
+    implementation "com.tianscar.javasound:javasound-flac:1.4.1"
 }
 
 java {

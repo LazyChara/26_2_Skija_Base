@@ -22,6 +22,7 @@ public class SkijaRenderer implements AutoCloseable {
     private boolean dirty = true;
     private Bitmap sharedBitmap;
     private ImageInfo sharedImageInfo;
+    private byte[] cachedPixelBytes;
     private static final float SQUIRCLE_N = 5f;
     private static final int SQUIRCLE_SEGMENTS = 20;
     @SuppressWarnings("deprecation")
@@ -36,6 +37,7 @@ public class SkijaRenderer implements AutoCloseable {
         this.defaultTypeface = SHARED_DEFAULT_TYPEFACE;
     }
     public Canvas canvas() { return surface.getCanvas(); }
+    public Surface getSurface() { return surface; }
     public void clear(int argb) {
         surface.getCanvas().clear(argb);
         dirty = true;
@@ -171,7 +173,7 @@ public class SkijaRenderer implements AutoCloseable {
         dirty = true;
     }
     public void drawTextCentered(String text, float centerX, float y,
-                                  Typeface typeface, float fontSize, int argbColor) {
+                                   Typeface typeface, float fontSize, int argbColor) {
         if (typeface == null) { drawTextCentered(text, centerX, y, fontSize, argbColor); return; }
         text = sanitizeText(text);
         if (text.isEmpty()) return;
@@ -312,15 +314,20 @@ public class SkijaRenderer implements AutoCloseable {
             snapshot.readPixels(sharedBitmap, 0, 0);
             byte[] pixelBytes = sharedBitmap.readPixels(sharedImageInfo, width * 4, 0, 0);
             if (pixelBytes != null) {
-                for (int i = 0; i < pixelBytes.length; i += 4) {
-                    byte tmp = pixelBytes[i];
-                    pixelBytes[i] = pixelBytes[i + 2];
-                    pixelBytes[i + 2] = tmp;
+                int len = pixelBytes.length;
+                if (cachedPixelBytes == null || cachedPixelBytes.length != len) {
+                    cachedPixelBytes = new byte[len];
+                }
+                for (int i = 0; i < len; i += 4) {
+                    cachedPixelBytes[i]     = pixelBytes[i + 2];
+                    cachedPixelBytes[i + 1] = pixelBytes[i + 1];
+                    cachedPixelBytes[i + 2] = pixelBytes[i];
+                    cachedPixelBytes[i + 3] = pixelBytes[i + 3];
                 }
                 NativeImage nativeImage = mcTexture.getPixels();
-                ByteBuffer nativeBuf = MemoryUtil.memByteBuffer(nativeImage.getPointer(), pixelBytes.length);
+                ByteBuffer nativeBuf = MemoryUtil.memByteBuffer(nativeImage.getPointer(), len);
                 nativeBuf.rewind();
-                nativeBuf.put(pixelBytes);
+                nativeBuf.put(cachedPixelBytes);
                 mcTexture.upload();
             }
         }

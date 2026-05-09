@@ -49,6 +49,7 @@ public class SkijaTestClient implements ClientModInitializer {
         LOGGER.info("[SkijaTest] log print test, Ciallo !");
         ModuleManager.init();
         com.lazychara.skijatest.config.ConfigManager.load();
+        MusicLoader.init();
         HudManager.init();
         EspManager.init();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
