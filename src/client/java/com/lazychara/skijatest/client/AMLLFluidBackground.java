@@ -22,12 +22,14 @@ public final class AMLLFluidBackground implements AutoCloseable {
     private static final int TEXTURE_SIZE = 32;
     private static final int CONTROL_W = 5;
     private static final int CONTROL_H = 5;
-    private static final int SUBDIVISIONS = 11;
+    private static final int SUBDIVISIONS = 8;
     private static final int GRID_W = (CONTROL_W - 1) * SUBDIVISIONS + 1;
     private static final int GRID_H = (CONTROL_H - 1) * SUBDIVISIONS + 1;
     private static final int VERTEX_COUNT = GRID_W * GRID_H;
 
     private Image textureImage;
+    private Shader textureShader;
+    private Paint meshPaint;
     private ControlPoint[][] controlPoints;
     private short[] indices;
     private int[] colors;
@@ -59,6 +61,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
                 ImageIO.write(texture, "png", out);
                 textureImage = Image.makeFromEncoded(out.toByteArray());
             }
+            rebuildShader();
             controlPoints = generateControlPoints(seed);
             buildStaticMeshData();
             positions = null;
@@ -67,7 +70,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
             lastHeight = -1f;
         } catch (Exception e) {
             SkijaTestClient.LOGGER.warn("[AMLLFluidBackground] Failed to rebuild mesh background", e);
-            textureImage = null;
+            closeImage();
             controlPoints = null;
             positions = null;
             texCoords = null;
@@ -75,19 +78,10 @@ public final class AMLLFluidBackground implements AutoCloseable {
     }
 
     public boolean draw(Canvas canvas, float width, float height, float time, float lowFreqVolume) {
-        if (textureImage == null || controlPoints == null) return false;
+        if (textureImage == null || textureShader == null || meshPaint == null || controlPoints == null) return false;
         ensurePositions(width, height);
         updateTextureCoordinates(time, lowFreqVolume);
-        try (Shader shader = textureImage.makeShader(
-                FilterTileMode.MIRROR,
-                FilterTileMode.MIRROR,
-                SamplingMode.LINEAR,
-                Matrix33.IDENTITY);
-             Paint paint = new Paint()) {
-            paint.setAntiAlias(true);
-            paint.setShader(shader);
-            canvas.drawTriangles(positions, colors, texCoords, indices, BlendMode.MODULATE, paint);
-        }
+        canvas.drawTriangles(positions, colors, texCoords, indices, BlendMode.MODULATE, meshPaint);
         return true;
     }
 
@@ -505,7 +499,35 @@ public final class AMLLFluidBackground implements AutoCloseable {
         return 0xFF000000 | (r << 16) | (g << 8) | bl;
     }
 
+    private void rebuildShader() {
+        if (meshPaint != null) {
+            meshPaint.close();
+            meshPaint = null;
+        }
+        if (textureShader != null) {
+            textureShader.close();
+            textureShader = null;
+        }
+        if (textureImage == null) return;
+        textureShader = textureImage.makeShader(
+                FilterTileMode.MIRROR,
+                FilterTileMode.MIRROR,
+                SamplingMode.LINEAR,
+                Matrix33.IDENTITY);
+        meshPaint = new Paint();
+        meshPaint.setAntiAlias(true);
+        meshPaint.setShader(textureShader);
+    }
+
     private void closeImage() {
+        if (meshPaint != null) {
+            meshPaint.close();
+            meshPaint = null;
+        }
+        if (textureShader != null) {
+            textureShader.close();
+            textureShader = null;
+        }
         if (textureImage != null) {
             textureImage.close();
             textureImage = null;
