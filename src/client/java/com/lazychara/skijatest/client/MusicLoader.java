@@ -268,10 +268,20 @@ public class MusicLoader {
             AudioFormat outputFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, sampleRate, 16, channels, channels * 2, sampleRate, false);
             long startMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
             long bytesToSkip = Math.max(0L, (long) (startSeconds * sampleRate) * sourceFrameSize);
+            byte[] skipBuffer = new byte[8192];
             while (bytesToSkip > 0) {
-                long skipped = pcm.skip(bytesToSkip);
-                if (skipped <= 0) break;
-                bytesToSkip -= skipped;
+                try {
+                    long skipped = pcm.skip(bytesToSkip);
+                    if (skipped > 0) {
+                        bytesToSkip -= skipped;
+                        continue;
+                    }
+                } catch (Exception e) {
+                }
+                int toRead = (int) Math.min(bytesToSkip, skipBuffer.length);
+                int read = pcm.read(skipBuffer, 0, toRead);
+                if (read < 0) break;
+                bytesToSkip -= read;
             }
             SourceDataLine line = AudioSystem.getSourceDataLine(outputFormat);
             if (isPlaybackCancelled(serial)) return;
