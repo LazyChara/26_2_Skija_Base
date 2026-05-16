@@ -11,3 +11,4 @@ Love from Eatgrapes for Vulkan support in Skija
 
 ## 致谢
 - 感谢[AMLL Player](https://github.com/amll-dev/applemusic-like-lyrics)提供的灵感与思路
+- MusicPage部分我将其单独称之为AMLL For Minecraft
