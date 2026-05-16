@@ -2,13 +2,34 @@ package com.lazychara.skijatest.client;
 
 import io.github.humbleui.skija.BlendMode;
 import io.github.humbleui.skija.Canvas;
+
 import io.github.humbleui.skija.FilterTileMode;
 import io.github.humbleui.skija.Image;
+
 import io.github.humbleui.skija.Matrix33;
 import io.github.humbleui.skija.Paint;
+
 import io.github.humbleui.skija.SamplingMode;
 import io.github.humbleui.skija.Shader;
+
 import io.github.humbleui.types.Point;
+
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.render.TextureSetup;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2f;
+import org.joml.Matrix3x2fc;
+
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -16,7 +37,11 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+
 import java.util.Random;
+
+import java.util.concurrent.atomic.AtomicLong;
+
 
 public final class AMLLFluidBackground implements AutoCloseable {
     private static final int TEXTURE_SIZE = 32;
@@ -30,6 +55,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
     private Image textureImage;
     private Shader textureShader;
     private Paint meshPaint;
+    private int[] texturePixelsABGR;
     private ControlPoint[][] controlPoints;
     private short[] indices;
     private int[] colors;
@@ -57,6 +83,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
                 cover = ImageIO.read(new ByteArrayInputStream(coverBytes));
             }
             BufferedImage texture = cover != null ? makeAlbumTexture(cover) : makeFallbackTexture(seed);
+            texturePixelsABGR = extractTexturePixelsABGR(texture);
             try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 ImageIO.write(texture, "png", out);
                 textureImage = Image.makeFromEncoded(out.toByteArray());
@@ -71,6 +98,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
         } catch (Exception e) {
             SkijaTestClient.LOGGER.warn("[AMLLFluidBackground] Failed to rebuild mesh background", e);
             closeImage();
+            texturePixelsABGR = null;
             controlPoints = null;
             positions = null;
             texCoords = null;
@@ -83,6 +111,90 @@ public final class AMLLFluidBackground implements AutoCloseable {
         updateTextureCoordinates(time, lowFreqVolume);
         canvas.drawTriangles(positions, colors, texCoords, indices, BlendMode.MODULATE, meshPaint);
         return true;
+    }
+
+    public boolean fillGpuPositions(float width, float height, float[] out) {
+        if (controlPoints == null || out == null || out.length < VERTEX_COUNT * 2) return false;
+        float aspect = Math.max(0.01f, width / Math.max(1f, height));
+        for (int gy = 0; gy < GRID_H; gy++) {
+            int cellY = Math.min(CONTROL_H - 2, gy / SUBDIVISIONS);
+            float v = (gy - cellY * SUBDIVISIONS) / (float) SUBDIVISIONS;
+            for (int gx = 0; gx < GRID_W; gx++) {
+                int cellX = Math.min(CONTROL_W - 2, gx / SUBDIVISIONS);
+                float u = (gx - cellX * SUBDIVISIONS) / (float) SUBDIVISIONS;
+                float[] p = evalPatch(cellX, cellY, u, v);
+                float px = p[0];
+                float py = p[1];
+                if (aspect > 1f) py *= aspect;
+                else px /= aspect;
+                int i = (gy * GRID_W + gx) * 2;
+                out[i] = (px + 1f) * 0.5f * width;
+                out[i + 1] = (py + 1f) * 0.5f * height;
+            }
+        }
+        return true;
+    }
+
+    public boolean fillGpuTexCoords(float time, float lowFreqVolume, float[] out) {
+        if (baseUvs == null || out == null || out.length < VERTEX_COUNT * 2) return false;
+        float volume = clamp(lowFreqVolume, 0f, 0.45f);
+        float uTime = time * 0.24f;
+        float angle = (uTime + volume) * 2.0f;
+        float sin = (float) Math.sin(angle);
+        float cos = (float) Math.cos(angle);
+        float scale = Math.max(0.62f, 1.0f - volume * 2.0f);
+        for (int i = 0; i < VERTEX_COUNT; i++) {
+            float u = baseUvs[i * 2];
+            float v = baseUvs[i * 2 + 1];
+            float cx = u - 0.2f;
+            float cy = v - 0.2f;
+            float ru = cos * cx - sin * cy;
+            float rv = sin * cx + cos * cy;
+            out[i * 2] = mirror01(ru * scale + 0.5f);
+            out[i * 2 + 1] = mirror01(rv * scale + 0.5f);
+        }
+        return true;
+    }
+
+    public int[] copyTexturePixelsABGR() {
+        return texturePixelsABGR == null ? null : texturePixelsABGR.clone();
+    }
+
+    public static int gridWidth() {
+        return GRID_W;
+    }
+
+    public static int gridHeight() {
+        return GRID_H;
+    }
+
+    public static int vertexCount() {
+        return VERTEX_COUNT;
+    }
+
+    public static int textureSize() {
+        return TEXTURE_SIZE;
+    }
+
+    private int[] extractTexturePixelsABGR(BufferedImage texture) {
+        int[] out = new int[TEXTURE_SIZE * TEXTURE_SIZE];
+        for (int y = 0; y < TEXTURE_SIZE; y++) {
+            for (int x = 0; x < TEXTURE_SIZE; x++) {
+                int argb = texture.getRGB(x, y);
+                int a = (argb >>> 24) & 0xFF;
+                int r = (argb >>> 16) & 0xFF;
+                int g = (argb >>> 8) & 0xFF;
+                int b = argb & 0xFF;
+                out[y * TEXTURE_SIZE + x] = (a << 24) | (b << 16) | (g << 8) | r;
+            }
+        }
+        return out;
+    }
+
+    private float mirror01(float value) {
+        float wrapped = value % 2f;
+        if (wrapped < 0f) wrapped += 2f;
+        return wrapped <= 1f ? wrapped : 2f - wrapped;
     }
 
     private BufferedImage makeAlbumTexture(BufferedImage cover) {
@@ -537,12 +649,129 @@ public final class AMLLFluidBackground implements AutoCloseable {
     @Override
     public void close() {
         closeImage();
+        texturePixelsABGR = null;
         controlPoints = null;
         indices = null;
         colors = null;
         baseUvs = null;
         positions = null;
         texCoords = null;
+    }
+
+    public static final class GuiRenderer implements AutoCloseable {
+        private static final AtomicLong TEXTURE_ID_COUNTER = new AtomicLong();
+        private final AMLLFluidBackground background = new AMLLFluidBackground();
+        private final String name;
+        private final float[] positions = new float[VERTEX_COUNT * 2];
+        private final float[] texCoords = new float[VERTEX_COUNT * 2];
+        private DynamicTexture texture;
+        private Identifier textureId;
+        private float lastWidth = -1f;
+        private float lastHeight = -1f;
+        private boolean ready;
+
+        public GuiRenderer(String name) {
+            this.name = name == null || name.isBlank() ? "amll_bg" : name;
+        }
+
+        public void rebuild(byte[] coverBytes, String seed) {
+            background.rebuild(coverBytes, seed);
+            uploadTexture(background.copyTexturePixelsABGR());
+            lastWidth = -1f;
+            lastHeight = -1f;
+            ready = textureId != null;
+        }
+
+        public boolean ready() {
+            return ready && textureId != null;
+        }
+
+        public boolean draw(GuiGraphicsExtractor g, float width, float height, float time, float lowFreqPulse) {
+            if (!ready()) return false;
+            if (Math.abs(width - lastWidth) > 0.5f || Math.abs(height - lastHeight) > 0.5f) {
+                if (!background.fillGpuPositions(width, height, positions)) return false;
+                lastWidth = width;
+                lastHeight = height;
+            }
+            if (!background.fillGpuTexCoords(time, lowFreqPulse, texCoords)) return false;
+            AbstractTexture abstractTexture = Minecraft.getInstance().getTextureManager().getTexture(textureId);
+            if (abstractTexture == null || abstractTexture.getTextureView() == null || abstractTexture.getSampler() == null) return false;
+            Matrix3x2f pose = new Matrix3x2f(g.pose());
+            ScreenRectangle scissor = g.scissorStack.peek();
+            ScreenRectangle bounds = new ScreenRectangle(0, 0, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))).transformMaxBounds(pose);
+            TextureSetup textureSetup = TextureSetup.singleTexture(abstractTexture.getTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+            g.guiRenderState.addGuiElement(new MeshRenderState(RenderPipelines.GUI_TEXTURED, textureSetup, pose, positions, texCoords, scissor, bounds));
+            return true;
+        }
+
+        private void uploadTexture(int[] pixelsABGR) {
+            closeTexture();
+            if (pixelsABGR == null || pixelsABGR.length < TEXTURE_SIZE * TEXTURE_SIZE) return;
+            NativeImage image = new NativeImage(TEXTURE_SIZE, TEXTURE_SIZE, false);
+            for (int y = 0; y < TEXTURE_SIZE; y++) {
+                for (int x = 0; x < TEXTURE_SIZE; x++) {
+                    image.setPixelABGR(x, y, pixelsABGR[y * TEXTURE_SIZE + x]);
+                }
+            }
+            texture = new DynamicTexture(() -> "amll-fluid-bg", image);
+            textureId = Identifier.parse("skija-test:" + name + "_" + TEXTURE_ID_COUNTER.incrementAndGet());
+            Minecraft.getInstance().getTextureManager().register(textureId, texture);
+            texture.upload();
+        }
+
+        private void closeTexture() {
+            if (textureId != null) {
+                try {
+                    Minecraft.getInstance().getTextureManager().release(textureId);
+                } catch (Exception e) {
+                    if (texture != null) {
+                        try {
+                            texture.close();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
+            texture = null;
+            textureId = null;
+        }
+
+        @Override
+        public void close() {
+            closeTexture();
+            background.close();
+            ready = false;
+        }
+
+        private record MeshRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
+                                       float[] positions, float[] texCoords,
+                                       ScreenRectangle scissorArea, ScreenRectangle bounds)
+                implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
+            @Override
+            public void buildVertices(VertexConsumer vertexConsumer) {
+                int gridW = AMLLFluidBackground.gridWidth();
+                int gridH = AMLLFluidBackground.gridHeight();
+                for (int y = 0; y < gridH - 1; y++) {
+                    for (int x = 0; x < gridW - 1; x++) {
+                        int p00 = y * gridW + x;
+                        int p10 = p00 + 1;
+                        int p01 = (y + 1) * gridW + x;
+                        int p11 = p01 + 1;
+                        addVertex(vertexConsumer, p00);
+                        addVertex(vertexConsumer, p01);
+                        addVertex(vertexConsumer, p11);
+                        addVertex(vertexConsumer, p10);
+                    }
+                }
+            }
+
+            private void addVertex(VertexConsumer vertexConsumer, int index) {
+                int i = index * 2;
+                vertexConsumer.addVertexWith2DPose(pose, positions[i], positions[i + 1])
+                        .setUv(texCoords[i], texCoords[i + 1])
+                        .setColor(0xFFFFFFFF);
+            }
+        }
     }
 
     private record PointConf(float x, float y, float ur, float vr, float up, float vp) {}

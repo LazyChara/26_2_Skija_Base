@@ -255,48 +255,61 @@ public class MusicLoader {
     }
 
     private static void playbackLoopJavaSound(MusicTrack track, float startSeconds, long serial) {
-        try (AudioInputStream encoded = AudioSystem.getAudioInputStream(track.filePath().toFile());
-             AudioInputStream pcm = AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, encoded)) {
-            AudioFormat decoded = pcm.getFormat();
-            if (decoded.isBigEndian() || decoded.getSampleSizeInBits() != 16) {
-                decoded = new AudioFormat(
-                        AudioFormat.Encoding.PCM_SIGNED,
-                        decoded.getSampleRate(),
-                        16,
-                        decoded.getChannels(),
-                        decoded.getChannels() * 2,
-                        decoded.getSampleRate(),
-                        false
-                );
+        AudioInputStream raw = null;
+        AudioInputStream pcm = null;
+        try {
+            raw = AudioSystem.getAudioInputStream(track.filePath().toFile());
+            AudioFormat rawFormat = raw.getFormat();
+            pcm = isPcmFormat(rawFormat) ? raw : AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, raw);
+            AudioFormat sourceFormat = pcm.getFormat();
+            int channels = Math.max(1, sourceFormat.getChannels());
+            float sampleRate = sourceFormat.getSampleRate() > 0f ? sourceFormat.getSampleRate() : 44100f;
+            int sourceFrameSize = sourceFormat.getFrameSize() > 0 ? sourceFormat.getFrameSize() : channels * Math.max(1, (sourceFormat.getSampleSizeInBits() + 7) / 8);
+            AudioFormat outputFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, sampleRate, 16, channels, channels * 2, sampleRate, false);
+            long startMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
+            long bytesToSkip = Math.max(0L, (long) (startSeconds * sampleRate) * sourceFrameSize);
+            while (bytesToSkip > 0) {
+                long skipped = pcm.skip(bytesToSkip);
+                if (skipped <= 0) break;
+                bytesToSkip -= skipped;
             }
-            {
-                long startMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
-                long bytesToSkip = Math.max(0L, (long) (startSeconds * decoded.getSampleRate()) * decoded.getFrameSize());
-                while (bytesToSkip > 0) {
-                    long skipped = pcm.skip(bytesToSkip);
-                    if (skipped <= 0) break;
-                    bytesToSkip -= skipped;
-                }
-                SourceDataLine line = AudioSystem.getSourceDataLine(decoded);
-                if (isPlaybackCancelled(serial)) return;
-                currentLine = line;
-                line.open(decoded);
+            SourceDataLine line = AudioSystem.getSourceDataLine(outputFormat);
+            if (isPlaybackCancelled(serial)) return;
+            currentLine = line;
+            line.open(outputFormat);
+            applyPlaybackVolume(line);
+            line.start();
+            boolean direct = isDirect16BitLittleEndian(sourceFormat);
+            byte[] inputBuffer = new byte[Math.max(8192, sourceFrameSize * 1024)];
+            long framesWritten = 0L;
+            int read;
+            while (!isPlaybackCancelled(serial) && (read = pcm.read(inputBuffer, 0, inputBuffer.length)) != -1) {
+                while (paused && !isPlaybackCancelled(serial)) Thread.sleep(25L);
+                if (isPlaybackCancelled(serial)) break;
+                int usable = read - Math.floorMod(read, sourceFrameSize);
+                if (usable <= 0) continue;
                 applyPlaybackVolume(line);
-                line.start();
-                byte[] buffer = new byte[8192];
-                int read;
-                while (!isPlaybackCancelled(serial) && (read = pcm.read(buffer, 0, buffer.length)) != -1) {
-                    while (paused && !isPlaybackCancelled(serial)) Thread.sleep(25L);
-                    if (isPlaybackCancelled(serial)) break;
-                    applyPlaybackVolume(line);
-                    line.write(buffer, 0, read);
-                    currentMicros = startMicros + line.getMicrosecondPosition();
+                if (direct) {
+                    line.write(inputBuffer, 0, usable);
+                    framesWritten += usable / sourceFrameSize;
+                } else {
+                    byte[] out = convertToSigned16LittleEndian(inputBuffer, usable, sourceFormat, sourceFrameSize);
+                    line.write(out, 0, out.length);
+                    framesWritten += out.length / outputFormat.getFrameSize();
                 }
-                if (!isPlaybackCancelled(serial)) line.drain();
+                currentMicros = startMicros + (long) (framesWritten * 1_000_000.0 / sampleRate);
             }
+            if (!isPlaybackCancelled(serial)) line.drain();
         } catch (InterruptedException ignored) {
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.warn("[MusicLoader] Failed to play {}", track.filePath(), e);
         } finally {
+            if (pcm != null && pcm != raw) {
+                try { pcm.close(); } catch (Exception ignored) {}
+            }
+            if (raw != null) {
+                try { raw.close(); } catch (Exception ignored) {}
+            }
             SourceDataLine line = currentLine;
             if (line != null && serial == playbackSerial) {
                 try { line.stop(); } catch (Exception ignored) {}
@@ -305,6 +318,73 @@ public class MusicLoader {
             if (serial == playbackSerial) currentLine = null;
             if (serial == playbackSerial && !stopRequested) paused = true;
         }
+    }
+
+    private static boolean isPcmFormat(AudioFormat format) {
+        AudioFormat.Encoding encoding = format.getEncoding();
+        return AudioFormat.Encoding.PCM_SIGNED.equals(encoding) || AudioFormat.Encoding.PCM_UNSIGNED.equals(encoding) || AudioFormat.Encoding.PCM_FLOAT.equals(encoding);
+    }
+
+    private static boolean isDirect16BitLittleEndian(AudioFormat format) {
+        return AudioFormat.Encoding.PCM_SIGNED.equals(format.getEncoding()) && format.getSampleSizeInBits() == 16 && !format.isBigEndian() && format.getFrameSize() == Math.max(1, format.getChannels()) * 2;
+    }
+
+    private static byte[] convertToSigned16LittleEndian(byte[] input, int len, AudioFormat format, int frameSize) {
+        int channels = Math.max(1, format.getChannels());
+        int bits = Math.max(1, format.getSampleSizeInBits());
+        int bytesPerSample = Math.max(1, (bits + 7) / 8);
+        int frames = len / frameSize;
+        byte[] out = new byte[frames * channels * 2];
+        int oi = 0;
+        for (int frame = 0; frame < frames; frame++) {
+            int frameOffset = frame * frameSize;
+            for (int ch = 0; ch < channels; ch++) {
+                int pos = frameOffset + ch * bytesPerSample;
+                short sample = readSampleAsSigned16(input, pos, bytesPerSample, bits, format);
+                out[oi++] = (byte) (sample & 0xFF);
+                out[oi++] = (byte) ((sample >>> 8) & 0xFF);
+            }
+        }
+        return out;
+    }
+
+    private static short readSampleAsSigned16(byte[] input, int pos, int bytesPerSample, int bits, AudioFormat format) {
+        if (pos < 0 || pos + bytesPerSample > input.length) return 0;
+        AudioFormat.Encoding encoding = format.getEncoding();
+        boolean unsigned = AudioFormat.Encoding.PCM_UNSIGNED.equals(encoding);
+        boolean floating = AudioFormat.Encoding.PCM_FLOAT.equals(encoding);
+        boolean big = format.isBigEndian();
+        if (floating && bits == 32 && bytesPerSample >= 4) {
+            int raw = big
+                    ? ((input[pos] & 0xFF) << 24) | ((input[pos + 1] & 0xFF) << 16) | ((input[pos + 2] & 0xFF) << 8) | (input[pos + 3] & 0xFF)
+                    : ((input[pos + 3] & 0xFF) << 24) | ((input[pos + 2] & 0xFF) << 16) | ((input[pos + 1] & 0xFF) << 8) | (input[pos] & 0xFF);
+            float value = Math.max(-1f, Math.min(1f, Float.intBitsToFloat(raw)));
+            return (short) Math.round(value * 32767f);
+        }
+        if (bits <= 8 || bytesPerSample == 1) {
+            int value = input[pos] & 0xFF;
+            if (unsigned) value -= 128;
+            else value = (byte) value;
+            return (short) (value << 8);
+        }
+        long raw = 0L;
+        if (big) {
+            for (int i = 0; i < bytesPerSample; i++) raw = (raw << 8) | (input[pos + i] & 0xFFL);
+        } else {
+            for (int i = bytesPerSample - 1; i >= 0; i--) raw = (raw << 8) | (input[pos + i] & 0xFFL);
+        }
+        int totalBits = bytesPerSample * 8;
+        if (unsigned) {
+            raw -= 1L << (totalBits - 1);
+        } else {
+            long signBit = 1L << (totalBits - 1);
+            if ((raw & signBit) != 0L) raw -= 1L << totalBits;
+        }
+        int shift = Math.max(0, totalBits - 16);
+        long sample = raw >> shift;
+        if (sample < Short.MIN_VALUE) sample = Short.MIN_VALUE;
+        if (sample > Short.MAX_VALUE) sample = Short.MAX_VALUE;
+        return (short) sample;
     }
 
     private static void playbackLoopMp3(MusicTrack track, float startSeconds, long serial) {

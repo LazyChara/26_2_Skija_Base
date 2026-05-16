@@ -20,17 +20,28 @@ public class SkijaRenderer implements AutoCloseable {
     private final Identifier textureId;
     private final Typeface defaultTypeface;
     private boolean dirty = true;
-    private Bitmap sharedBitmap;
     private ImageInfo sharedImageInfo;
-    private byte[] cachedPixelBytes;
+    private Pixmap uploadPixmap;
+    private ByteBuffer nativePixelBuffer;
+    private final boolean directSurface;
     private static final float SQUIRCLE_N = 5f;
     private static final int SQUIRCLE_SEGMENTS = 20;
     @SuppressWarnings("deprecation")
     public SkijaRenderer(String name, int width, int height) {
         this.width = width;
         this.height = height;
-        this.surface = Surface.makeRasterN32Premul(width, height);
         NativeImage nativeImage = new NativeImage(width, height, true);
+        this.sharedImageInfo = new ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.UNPREMUL);
+        this.nativePixelBuffer = MemoryUtil.memByteBuffer(nativeImage.getPointer(), Math.toIntExact((long) width * height * 4L));
+        this.uploadPixmap = Pixmap.make(sharedImageInfo, nativePixelBuffer, width * 4);
+        Surface direct = Surface.makeRasterDirect(uploadPixmap);
+        if (direct != null) {
+            this.surface = direct;
+            this.directSurface = true;
+        } else {
+            this.surface = Surface.makeRasterN32Premul(width, height);
+            this.directSurface = false;
+        }
         this.mcTexture = new DynamicTexture(() -> "skija-renderer", nativeImage);
         this.textureId = Identifier.parse("skija-test:" + name + "_" + TEXTURE_ID_COUNTER.incrementAndGet());
         Minecraft.getInstance().getTextureManager().register(textureId, mcTexture);
@@ -305,42 +316,21 @@ public class SkijaRenderer implements AutoCloseable {
     }
     public void upload() {
         if (!dirty || surface == null || mcTexture == null) return;
-        if (sharedBitmap == null) {
-            sharedImageInfo = ImageInfo.makeN32(width, height, ColorAlphaType.UNPREMUL);
-            sharedBitmap = new Bitmap();
-            sharedBitmap.allocPixels(sharedImageInfo);
-        }
-        try (Image snapshot = surface.makeImageSnapshot()) {
-            snapshot.readPixels(sharedBitmap, 0, 0);
-            byte[] pixelBytes = sharedBitmap.readPixels(sharedImageInfo, width * 4, 0, 0);
-            if (pixelBytes != null) {
-                int len = pixelBytes.length;
-                if (cachedPixelBytes == null || cachedPixelBytes.length != len) {
-                    cachedPixelBytes = new byte[len];
-                }
-                for (int i = 0; i < len; i += 4) {
-                    cachedPixelBytes[i]     = pixelBytes[i + 2];
-                    cachedPixelBytes[i + 1] = pixelBytes[i + 1];
-                    cachedPixelBytes[i + 2] = pixelBytes[i];
-                    cachedPixelBytes[i + 3] = pixelBytes[i + 3];
-                }
-                NativeImage nativeImage = mcTexture.getPixels();
-                ByteBuffer nativeBuf = MemoryUtil.memByteBuffer(nativeImage.getPointer(), len);
-                nativeBuf.rewind();
-                nativeBuf.put(cachedPixelBytes);
-                mcTexture.upload();
-            }
+        if (directSurface || surface.readPixels(uploadPixmap, 0, 0)) {
+            mcTexture.upload();
         }
         dirty = false;
     }
+
     public Identifier textureId() { return textureId; }
     public int getWidth() { return width; }
     public int getHeight() { return height; }
     public Typeface getDefaultTypeface() { return defaultTypeface; }
     @Override
     public void close() {
-        if (sharedBitmap != null) { sharedBitmap.close(); sharedBitmap = null; }
         if (surface != null) { surface.close(); surface = null; }
+        if (uploadPixmap != null) { uploadPixmap.close(); uploadPixmap = null; }
+        nativePixelBuffer = null;
         if (mcTexture != null) {
             try {
                 Minecraft.getInstance().getTextureManager().release(textureId);
