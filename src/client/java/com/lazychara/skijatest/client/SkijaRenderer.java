@@ -169,6 +169,35 @@ public class SkijaRenderer implements AutoCloseable {
         }
         dirty = true;
     }
+    public void drawTextCenteredY(String text, float x, float centerY, float fontSize, int argbColor) {
+        if (defaultTypeface == null) return;
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
+        try (Font font = new Font(defaultTypeface, fontSize);
+             Paint paint = new Paint()) {
+            paint.setColor(argbColor);
+            paint.setAntiAlias(true);
+            FontMetrics metrics = font.getMetrics();
+            float baseline = centerY - (metrics.getAscent() + metrics.getDescent()) * 0.5f;
+            surface.getCanvas().drawString(text, x, baseline, font, paint);
+        }
+        dirty = true;
+    }
+    public void drawTextCenteredY(String text, float x, float centerY,
+                                  Typeface typeface, float fontSize, int argbColor) {
+        if (typeface == null) { drawTextCenteredY(text, x, centerY, fontSize, argbColor); return; }
+        text = sanitizeText(text);
+        if (text.isEmpty()) return;
+        try (Font font = new Font(typeface, fontSize);
+             Paint paint = new Paint()) {
+            paint.setColor(argbColor);
+            paint.setAntiAlias(true);
+            FontMetrics metrics = font.getMetrics();
+            float baseline = centerY - (metrics.getAscent() + metrics.getDescent()) * 0.5f;
+            surface.getCanvas().drawString(text, x, baseline, font, paint);
+        }
+        dirty = true;
+    }
     public void drawTextCentered(String text, float centerX, float y, float fontSize, int argbColor) {
         if (defaultTypeface == null) return;
         text = sanitizeText(text);

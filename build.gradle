@@ -51,6 +51,10 @@ tasks.withType(JavaCompile).configureEach {
 processResources {
     inputs.property "version", project.version
 
+    from("src/main/resources/skija-test/shaders") {
+        into "assets/skija-test/shaders"
+    }
+
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }

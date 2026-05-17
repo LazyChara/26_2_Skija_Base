@@ -148,6 +148,7 @@ public class SkijaTestScreen extends Screen {
                     animatingModule = true;
                 }
             }
+            if (animatingModule) moduleDirty = true;
             if (!musicTransitioning && !closeTransitioning) handleMouse(mx, my);
             if (panelDirty) {
                 renderPanel();
@@ -746,6 +747,7 @@ public class SkijaTestScreen extends Screen {
         }
         return super.keyPressed(e);
     }
+    @SuppressWarnings("unused")
     private int blendAlpha(int color, float alphaMult) {
         int a = Math.round(((color >> 24) & 0xFF) * alphaMult);
         return (a << 24) | (color & 0x00FFFFFF);

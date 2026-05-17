@@ -45,18 +45,60 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class AMLLFluidBackground implements AutoCloseable {
     private static final int TEXTURE_SIZE = 32;
-    private static final int CONTROL_W = 5;
-    private static final int CONTROL_H = 5;
-    private static final int SUBDIVISIONS = 8;
-    private static final int GRID_W = (CONTROL_W - 1) * SUBDIVISIONS + 1;
-    private static final int GRID_H = (CONTROL_H - 1) * SUBDIVISIONS + 1;
-    private static final int VERTEX_COUNT = GRID_W * GRID_H;
+    private static final int SUBDIVISIONS = 50;
+    private static final PointConf[][][] OFFICIAL_PRESETS = new PointConf[][][]{
+            {
+                    {pc(-1f, -1f, 0f, 0f, 1f, 1f), pc(-0.33333334f, -1f, 0f, 0f, 1f, 1f), pc(0.33333334f, -1f, 0f, 0f, 1f, 1f), pc(1f, -1f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, -0.044954f, 0f, 0f, 1f, 1f), pc(-0.24056117f, -0.22465999f, 0f, 0f, 1f, 1f), pc(0.33475888f, -0.005312972f, 0f, 0f, 1f, 1f), pc(0.998992f, -0.3382976f, 8f, 0f, 0.566f, 1.792f)},
+                    {pc(-1f, 0.33333334f, 0f, 0f, 1f, 1f), pc(-0.34254974f, 0f, 0f, 0f, 1f, 1f), pc(0.33214378f, 0.19817764f, 0f, 0f, 1f, 1f), pc(1f, 0.07661182f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 1f, 0f, 0f, 1f, 1f), pc(-0.33333334f, 1f, 0f, 0f, 1f, 1f), pc(0.33333334f, 1f, 0f, 0f, 1f, 1f), pc(1f, 1f, 0f, 0f, 1f, 1f)}
+            },
+            {
+                    {pc(-1f, -1f, 0f, 0f, 1f, 2.075f), pc(-0.33333334f, -1f, 0f, 0f, 1f, 1f), pc(0.33333334f, -1f, 0f, 0f, 1f, 1f), pc(1f, -1f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, -0.45457795f, 0f, 0f, 1f, 1f), pc(-0.33333334f, -0.33333334f, 0f, 0f, 1f, 1f), pc(0.088940315f, -0.6025711f, -32f, 45f, 1f, 1f), pc(1f, -0.33333334f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, -0.07402409f, 1f, 0f, 1f, 0.094f), pc(-0.27194226f, 0.0977537f, 25f, -18f, 1.321f, 0f), pc(0.19877414f, 0.43073833f, 48f, -40f, 0.755f, 0.975f), pc(1f, 0.33333334f, -37f, 0f, 1f, 1f)},
+                    {pc(-1f, 1f, 0f, 0f, 1f, 1f), pc(-0.33333334f, 1f, 0f, 0f, 1f, 1f), pc(0.5125851f, 1f, -20f, -18f, 0f, 1.604f), pc(1f, 1f, 0f, 0f, 1f, 1f)}
+            },
+            {
+                    {pc(-1f, -1f, 0f, 0f, 1f, 1f), pc(-0.5f, -1f, 0f, 0f, 1f, 1f), pc(0f, -1f, 0f, 0f, 1f, 1f), pc(0.5f, -1f, 0f, 0f, 1f, 1f), pc(1f, -1f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, -0.5f, 0f, 0f, 1f, 1f), pc(-0.5f, -0.5f, 0f, 0f, 1f, 1f), pc(-0.0052029684f, -0.6131421f, 0f, 0f, 1f, 1f), pc(0.5884227f, -0.3990805f, 0f, 0f, 1f, 1f), pc(1f, -0.5f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 0f, 0f, 0f, 1f, 1f), pc(-0.42100248f, -0.11895058f, 0f, 0f, 1f, 1f), pc(-0.10196134f, -0.023812119f, 0f, -47f, 0.629f, 0.849f), pc(0.40275127f, -0.063453145f, 0f, 0f, 1f, 1f), pc(1f, 0f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 0.5f, 0f, 0f, 1f, 1f), pc(0.068019584f, 0.5205913f, -31f, -45f, 1f, 1f), pc(0.2144647f, 0.2933161f, 6f, -56f, 0.566f, 1.321f), pc(0.5f, 0.5f, 0f, 0f, 1f, 1f), pc(1f, 0.5f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 1f, 0f, 0f, 1f, 1f), pc(-0.31378374f, 1f, 0f, 0f, 1f, 1f), pc(0.26153633f, 1f, 0f, 0f, 1f, 1f), pc(0.5f, 1f, 0f, 0f, 1f, 1f), pc(1f, 1f, 0f, 0f, 1f, 1f)}
+            },
+            {
+                    {pc(-1f, -1f, 0f, 0f, 1f, 1f), pc(-0.4501953f, -1f, 0f, 55f, 1f, 2.075f), pc(0.1953125f, -1f, 0f, 0f, 1f, 1f), pc(0.4580078f, -1f, 0f, -25f, 1f, 1f), pc(1f, -1f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, -0.25144753f, -16f, 0f, 2.327f, 0.943f), pc(-0.55859375f, -0.6609326f, 47f, 0f, 2.358f, 0.377f), pc(0.23242188f, -0.52443755f, -66f, -25f, 1.855f, 1.164f), pc(0.6855469f, -0.37537065f, 0f, 0f, 1f, 1f), pc(1f, -0.6699125f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 0.035910398f, 0f, 0f, 1f, 1f), pc(-0.4921875f, 0.005378616f, 90f, 23f, 1f, 1.981f), pc(0.021484375f, -0.13650437f, 0f, 42f, 1f, 1f), pc(0.4765625f, 0.05925823f, -30f, 0f, 1.95f, 0.44f), pc(1f, 0.25142884f, 0f, 0f, 1f, 1f)},
+                    {pc(-1f, 0.69683367f, -68f, 0f, 1f, 0.786f), pc(-0.6904297f, 0.58907443f, -68f, 0f, 1f, 1f), pc(0.18457031f, 0.38792387f, 61f, 0f, 1f, 1f), pc(0.60546875f, 0.46335533f, -47f, -59f, 0.849f, 1.73f), pc(1f, 0.6214022f, -33f, 0f, 0.377f, 1.604f)},
+                    {pc(-1f, 1f, 0f, 0f, 1f, 1f), pc(-0.5f, 1f, 0f, -73f, 1f, 1f), pc(-0.32714844f, 1f, 0f, -24f, 0.314f, 2.704f), pc(0.5f, 1f, 0f, 0f, 1f, 1f), pc(1f, 1f, 0f, 0f, 1f, 1f)}
+            },
+            {
+                    {pc(-1f, -1f), pc(-0.6393f, -1f, 0f, 0f, 1f, 2.3884f), pc(0f, -1f), pc(0.5f, -1f), pc(1f, -1f)},
+                    {pc(-1f, -0.2301f), pc(-0.6934f, -0.331f, 0f, -0.7188f, 1f, 1.063f), pc(-0.0082f, -0.6814f, -0.2583f, 0f, 1.0964f, 1f), pc(0.5836f, -0.531f, 0.7029f, 0f, 1.5466f, 1f), pc(1f, -0.6407f)},
+                    {pc(-1f, 0.2973f, 0f, 0f, 1.8352f, 1f), pc(-0.4082f, 0.0602f), pc(-0.1803f, -0.3646f, -0.2998f, 0f, 1.1513f, 1f), pc(0.477f, -0.1027f, 0.8903f, -0.1882f, 1.0807f, 0.8551f), pc(1f, -0.2973f)},
+                    {pc(-1f, 0.7628f, 0f, 0f, 2.3868f, 1f), pc(-0.2525f, 0.4814f, -0.8406f, -1.6199f, 1.4093f, 1.2215f), pc(0.3607f, 0.2814f, -1.0713f, -0.0529f, 1.0025f, 0.7611f), pc(0.4885f, 0.623f, 0f, 0.8184f, 1f, 1.2876f), pc(1f, 0.5f)},
+                    {pc(-1f, 1f), pc(-0.4033f, 1f), pc(0.2672f, 1f), pc(0.5967f, 1f), pc(1f, 1f)}
+            },
+            {
+                    {pc(-1f, -1f), pc(-0.2197f, -1f), pc(0.0197f, -1f), pc(0.8033f, -1f), pc(1f, -1f)},
+                    {pc(-1f, -0.5451f), pc(-0.4885f, -0.4035f, -1.0246f, -0.2268f, 1.1936f, 0.8005f), pc(-0.1213f, -0.2867f, 0f, -0.6981f, 1f, 0.809f), pc(0.3246f, -0.5628f, 0f, -1.2188f, 1f, 1.044f), pc(1f, -0.3292f)},
+                    {pc(-1f, 0.1416f), pc(-0.341f, -0.0142f, 0f, -0.4004f, 1f, 1.1293f), pc(-0.0393f, -0.023f, 0.2915f, -0.373f, 1.044f, 0.9879f), pc(0.3148f, -0.0673f, -0.7853f, -0.8962f, 1.4709f, 1.0247f), pc(1f, 0.1912f)},
+                    {pc(-1f, 0.5f), pc(-0.2689f, 0.2743f, 0.3404f, -0.5248f, 1.0184f, 0.4391f), pc(0.0721f, 0.269f, 0.5302f, 0.1244f, 0.6723f, 0.3225f), pc(0.4148f, 0.3894f, -0.6977f, -0.6783f, 0.8094f, 0.9247f), pc(1f, 0.446f)},
+                    {pc(-1f, 1f), pc(-0.7311f, 1f), pc(0.323f, 1f), pc(0.6393f, 1f), pc(1f, 1f)}
+            }
+    };
 
     private Image textureImage;
     private Shader textureShader;
     private Paint meshPaint;
     private int[] texturePixelsABGR;
     private ControlPoint[][] controlPoints;
+    private int controlW;
+    private int controlH;
+    private int gridW;
+    private int gridH;
+    private int vertexCount;
     private short[] indices;
     private int[] colors;
     private float[] baseUvs;
@@ -66,6 +108,14 @@ public final class AMLLFluidBackground implements AutoCloseable {
     private float lastHeight = -1f;
     private long seed;
 
+    private static PointConf pc(float x, float y) {
+        return new PointConf(x, y, 0f, 0f, 1f, 1f);
+    }
+
+    private static PointConf pc(float x, float y, float ur, float vr, float up, float vp) {
+        return new PointConf(x, y, ur, vr, up, vp);
+    }
+
     public Image image() {
         return textureImage;
     }
@@ -74,7 +124,8 @@ public final class AMLLFluidBackground implements AutoCloseable {
         rebuild(coverBytes, seedText, 0, 0);
     }
 
-    public void rebuild(byte[] coverBytes, String seedText, int targetWidth, int targetHeight) {
+    @SuppressWarnings("deprecation")
+    public void rebuild(byte[] coverBytes, String seedText, int width, int height) {
         closeImage();
         try {
             seed = seedText == null ? 0L : seedText.hashCode();
@@ -100,6 +151,11 @@ public final class AMLLFluidBackground implements AutoCloseable {
             closeImage();
             texturePixelsABGR = null;
             controlPoints = null;
+            controlW = 0;
+            controlH = 0;
+            gridW = 0;
+            gridH = 0;
+            vertexCount = 0;
             positions = null;
             texCoords = null;
         }
@@ -114,20 +170,21 @@ public final class AMLLFluidBackground implements AutoCloseable {
     }
 
     public boolean fillGpuPositions(float width, float height, float[] out) {
-        if (controlPoints == null || out == null || out.length < VERTEX_COUNT * 2) return false;
+        if (controlPoints == null || out == null || out.length < vertexCount * 2) return false;
         float aspect = Math.max(0.01f, width / Math.max(1f, height));
-        for (int gy = 0; gy < GRID_H; gy++) {
-            int cellY = Math.min(CONTROL_H - 2, gy / SUBDIVISIONS);
-            float v = (gy - cellY * SUBDIVISIONS) / (float) SUBDIVISIONS;
-            for (int gx = 0; gx < GRID_W; gx++) {
-                int cellX = Math.min(CONTROL_W - 2, gx / SUBDIVISIONS);
-                float u = (gx - cellX * SUBDIVISIONS) / (float) SUBDIVISIONS;
+        float subdivM1 = SUBDIVISIONS - 1f;
+        for (int gy = 0; gy < gridH; gy++) {
+            int cellY = Math.min(controlH - 2, gy / SUBDIVISIONS);
+            float v = (gy - cellY * SUBDIVISIONS) / subdivM1;
+            for (int gx = 0; gx < gridW; gx++) {
+                int cellX = Math.min(controlW - 2, gx / SUBDIVISIONS);
+                float u = (gx - cellX * SUBDIVISIONS) / subdivM1;
                 float[] p = evalPatch(cellX, cellY, u, v);
                 float px = p[0];
                 float py = p[1];
                 if (aspect > 1f) py *= aspect;
                 else px /= aspect;
-                int i = (gy * GRID_W + gx) * 2;
+                int i = (gy * gridW + gx) * 2;
                 out[i] = (px + 1f) * 0.5f * width;
                 out[i + 1] = (py + 1f) * 0.5f * height;
             }
@@ -136,22 +193,22 @@ public final class AMLLFluidBackground implements AutoCloseable {
     }
 
     public boolean fillGpuTexCoords(float time, float lowFreqVolume, float[] out) {
-        if (baseUvs == null || out == null || out.length < VERTEX_COUNT * 2) return false;
+        if (baseUvs == null || out == null || out.length < vertexCount * 2) return false;
         float volume = clamp(lowFreqVolume, 0f, 0.45f);
         float uTime = time * 0.24f;
         float angle = (uTime + volume) * 2.0f;
         float sin = (float) Math.sin(angle);
         float cos = (float) Math.cos(angle);
         float scale = Math.max(0.62f, 1.0f - volume * 2.0f);
-        for (int i = 0; i < VERTEX_COUNT; i++) {
+        for (int i = 0; i < vertexCount; i++) {
             float u = baseUvs[i * 2];
             float v = baseUvs[i * 2 + 1];
             float cx = u - 0.2f;
             float cy = v - 0.2f;
             float ru = cos * cx - sin * cy;
             float rv = sin * cx + cos * cy;
-            out[i * 2] = mirror01(ru * scale + 0.5f);
-            out[i * 2 + 1] = mirror01(rv * scale + 0.5f);
+            out[i * 2] = ru * scale + 0.5f;
+            out[i * 2 + 1] = rv * scale + 0.5f;
         }
         return true;
     }
@@ -160,16 +217,16 @@ public final class AMLLFluidBackground implements AutoCloseable {
         return texturePixelsABGR == null ? null : texturePixelsABGR.clone();
     }
 
-    public static int gridWidth() {
-        return GRID_W;
+    public int gridWidth() {
+        return gridW;
     }
 
-    public static int gridHeight() {
-        return GRID_H;
+    public int gridHeight() {
+        return gridH;
     }
 
-    public static int vertexCount() {
-        return VERTEX_COUNT;
+    public int vertexCount() {
+        return vertexCount;
     }
 
     public static int textureSize() {
@@ -189,12 +246,6 @@ public final class AMLLFluidBackground implements AutoCloseable {
             }
         }
         return out;
-    }
-
-    private float mirror01(float value) {
-        float wrapped = value % 2f;
-        if (wrapped < 0f) wrapped += 2f;
-        return wrapped <= 1f ? wrapped : 2f - wrapped;
     }
 
     private BufferedImage makeAlbumTexture(BufferedImage cover) {
@@ -277,20 +328,36 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
     private ControlPoint[][] generateControlPoints(long seed) {
         Random random = new Random(seed * 31L + 0x51A7C0DEL);
-        PointConf[][] conf = new PointConf[CONTROL_H][CONTROL_W];
-        float dx = 2f / (CONTROL_W - 1);
-        float dy = 2f / (CONTROL_H - 1);
-        float variationFraction = randomRange(random, 0.40f, 0.58f);
-        float normalOffset = randomRange(random, 0.30f, 0.52f);
+        PointConf[][] conf = random.nextFloat() > 0.8f
+                ? generateRandomControlPointConf(random, 6, 6)
+                : copyPreset(OFFICIAL_PRESETS[Math.floorMod((int) (seed ^ (seed >>> 32)), OFFICIAL_PRESETS.length)]);
+        return buildControlPoints(conf);
+    }
+
+    private PointConf[][] copyPreset(PointConf[][] preset) {
+        int h = preset.length;
+        int w = preset[0].length;
+        PointConf[][] out = new PointConf[h][w];
+        for (int y = 0; y < h; y++) {
+            System.arraycopy(preset[y], 0, out[y], 0, w);
+        }
+        return out;
+    }
+
+    private PointConf[][] generateRandomControlPointConf(Random random, int w, int h) {
+        PointConf[][] conf = new PointConf[h][w];
+        float dx = 2f / (w - 1);
+        float dy = 2f / (h - 1);
+        float variationFraction = randomRange(random, 0.40f, 0.60f);
+        float normalOffset = randomRange(random, 0.30f, 0.60f);
         float smoothFactor = randomRange(random, 0.20f, 0.30f);
         float smoothModifier = randomRange(random, -0.10f, -0.05f);
         int smoothIters = 3 + random.nextInt(2);
-
-        for (int y = 0; y < CONTROL_H; y++) {
-            for (int x = 0; x < CONTROL_W; x++) {
-                float baseX = (x / (float) (CONTROL_W - 1)) * 2f - 1f;
-                float baseY = (y / (float) (CONTROL_H - 1)) * 2f - 1f;
-                boolean border = x == 0 || x == CONTROL_W - 1 || y == 0 || y == CONTROL_H - 1;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                float baseX = (x / (float) (w - 1)) * 2f - 1f;
+                float baseY = (y / (float) (h - 1)) * 2f - 1f;
+                boolean border = x == 0 || x == w - 1 || y == 0 || y == h - 1;
                 float px = baseX;
                 float py = baseY;
                 if (!border) {
@@ -301,8 +368,8 @@ public final class AMLLFluidBackground implements AutoCloseable {
                     float[] gradient = computeNoiseGradient(uNorm, vNorm);
                     float distToBorder = Math.min(Math.min(uNorm, 1f - uNorm), Math.min(vNorm, 1f - vNorm));
                     float weight = smoothstep(0f, 1f, distToBorder);
-                    px += gradient[0] * normalOffset * weight * 0.8f;
-                    py += gradient[1] * normalOffset * weight * 0.8f;
+                    px += gradient[0] * normalOffset * weight;
+                    py += gradient[1] * normalOffset * weight;
                 }
                 float ur = border ? 0f : randomRange(random, -60f, 60f);
                 float vr = border ? 0f : randomRange(random, -60f, 60f);
@@ -311,14 +378,21 @@ public final class AMLLFluidBackground implements AutoCloseable {
                 conf[y][x] = new PointConf(px, py, ur, vr, up, vp);
             }
         }
-
         smoothifyControlPoints(conf, smoothIters, smoothFactor, smoothModifier);
+        return conf;
+    }
 
-        ControlPoint[][] out = new ControlPoint[CONTROL_H][CONTROL_W];
-        float uPower = 2f / (CONTROL_W - 1);
-        float vPower = 2f / (CONTROL_H - 1);
-        for (int y = 0; y < CONTROL_H; y++) {
-            for (int x = 0; x < CONTROL_W; x++) {
+    private ControlPoint[][] buildControlPoints(PointConf[][] conf) {
+        controlH = conf.length;
+        controlW = conf[0].length;
+        gridW = (controlW - 1) * SUBDIVISIONS;
+        gridH = (controlH - 1) * SUBDIVISIONS;
+        vertexCount = gridW * gridH;
+        ControlPoint[][] out = new ControlPoint[controlH][controlW];
+        float uPower = 2f / (controlW - 1);
+        float vPower = 2f / (controlH - 1);
+        for (int y = 0; y < controlH; y++) {
+            for (int x = 0; x < controlW; x++) {
                 PointConf p = conf[y][x];
                 float uRot = (float) Math.toRadians(p.ur);
                 float vRot = (float) Math.toRadians(p.vr);
@@ -338,16 +412,18 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
     private void smoothifyControlPoints(PointConf[][] grid, int iterations, float factor, float modifier) {
         float f = factor;
+        int h = grid.length;
+        int w = grid[0].length;
         float[][] kernel = {
                 {1f, 2f, 1f},
                 {2f, 4f, 2f},
                 {1f, 2f, 1f}
         };
         for (int iter = 0; iter < iterations; iter++) {
-            PointConf[][] next = new PointConf[CONTROL_H][CONTROL_W];
-            for (int y = 0; y < CONTROL_H; y++) {
-                for (int x = 0; x < CONTROL_W; x++) {
-                    if (x == 0 || x == CONTROL_W - 1 || y == 0 || y == CONTROL_H - 1) {
+            PointConf[][] next = new PointConf[h][w];
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    if (x == 0 || x == w - 1 || y == 0 || y == h - 1) {
                         next[y][x] = grid[y][x];
                         continue;
                     }
@@ -374,22 +450,22 @@ public final class AMLLFluidBackground implements AutoCloseable {
                             lerp(cur.vp, svp / 16f, f));
                 }
             }
-            for (int y = 0; y < CONTROL_H; y++) {
-                System.arraycopy(next[y], 0, grid[y], 0, CONTROL_W);
+            for (int y = 0; y < h; y++) {
+                System.arraycopy(next[y], 0, grid[y], 0, w);
             }
             f = clamp01(f + modifier);
         }
     }
 
     private void buildStaticMeshData() {
-        indices = new short[(GRID_W - 1) * (GRID_H - 1) * 6];
+        indices = new short[(gridW - 1) * (gridH - 1) * 6];
         int idx = 0;
-        for (int y = 0; y < GRID_H - 1; y++) {
-            for (int x = 0; x < GRID_W - 1; x++) {
-                int p00 = y * GRID_W + x;
-                int p10 = y * GRID_W + x + 1;
-                int p01 = (y + 1) * GRID_W + x;
-                int p11 = (y + 1) * GRID_W + x + 1;
+        for (int y = 0; y < gridH - 1; y++) {
+            for (int x = 0; x < gridW - 1; x++) {
+                int p00 = y * gridW + x;
+                int p10 = y * gridW + x + 1;
+                int p01 = (y + 1) * gridW + x;
+                int p11 = (y + 1) * gridW + x + 1;
                 indices[idx++] = (short) p00;
                 indices[idx++] = (short) p10;
                 indices[idx++] = (short) p01;
@@ -398,34 +474,44 @@ public final class AMLLFluidBackground implements AutoCloseable {
                 indices[idx++] = (short) p01;
             }
         }
-        colors = new int[VERTEX_COUNT];
-        baseUvs = new float[VERTEX_COUNT * 2];
-        for (int y = 0; y < GRID_H; y++) {
-            for (int x = 0; x < GRID_W; x++) {
-                int i = y * GRID_W + x;
+        colors = new int[vertexCount];
+        baseUvs = new float[vertexCount * 2];
+        float subdivM1 = SUBDIVISIONS - 1f;
+        float invTH = 1f / (subdivM1 * (controlW - 1));
+        float invTW = 1f / (subdivM1 * (controlH - 1));
+        for (int y = 0; y < gridH; y++) {
+            int cellY = Math.min(controlH - 2, y / SUBDIVISIONS);
+            int localY = y - cellY * SUBDIVISIONS;
+            float sY = cellY / (float) (controlH - 1);
+            for (int x = 0; x < gridW; x++) {
+                int cellX = Math.min(controlW - 2, x / SUBDIVISIONS);
+                int localX = x - cellX * SUBDIVISIONS;
+                float sX = cellX / (float) (controlW - 1);
+                int i = y * gridW + x;
                 colors[i] = 0xFFFFFFFF;
-                baseUvs[i * 2] = x / (float) (GRID_W - 1);
-                baseUvs[i * 2 + 1] = y / (float) (GRID_H - 1);
+                baseUvs[i * 2] = sX + localX * invTH;
+                baseUvs[i * 2 + 1] = 1f - sY - localY * invTW;
             }
         }
     }
 
     private void ensurePositions(float width, float height) {
         if (positions != null && Math.abs(lastWidth - width) < 0.5f && Math.abs(lastHeight - height) < 0.5f) return;
-        positions = new Point[VERTEX_COUNT];
+        positions = new Point[vertexCount];
         float aspect = Math.max(0.01f, width / Math.max(1f, height));
-        for (int gy = 0; gy < GRID_H; gy++) {
-            int cellY = Math.min(CONTROL_H - 2, gy / SUBDIVISIONS);
-            float v = (gy - cellY * SUBDIVISIONS) / (float) SUBDIVISIONS;
-            for (int gx = 0; gx < GRID_W; gx++) {
-                int cellX = Math.min(CONTROL_W - 2, gx / SUBDIVISIONS);
-                float u = (gx - cellX * SUBDIVISIONS) / (float) SUBDIVISIONS;
+        float subdivM1 = SUBDIVISIONS - 1f;
+        for (int gy = 0; gy < gridH; gy++) {
+            int cellY = Math.min(controlH - 2, gy / SUBDIVISIONS);
+            float v = (gy - cellY * SUBDIVISIONS) / subdivM1;
+            for (int gx = 0; gx < gridW; gx++) {
+                int cellX = Math.min(controlW - 2, gx / SUBDIVISIONS);
+                float u = (gx - cellX * SUBDIVISIONS) / subdivM1;
                 float[] p = evalPatch(cellX, cellY, u, v);
                 float px = p[0];
                 float py = p[1];
                 if (aspect > 1f) py *= aspect;
                 else px /= aspect;
-                positions[gy * GRID_W + gx] = new Point((px + 1f) * 0.5f * width, (py + 1f) * 0.5f * height);
+                positions[gy * gridW + gx] = new Point((px + 1f) * 0.5f * width, (py + 1f) * 0.5f * height);
             }
         }
         lastWidth = width;
@@ -433,8 +519,8 @@ public final class AMLLFluidBackground implements AutoCloseable {
     }
 
     private void updateTextureCoordinates(float time, float lowFreqVolume) {
-        if (texCoords == null || texCoords.length != VERTEX_COUNT) {
-            texCoords = new Point[VERTEX_COUNT];
+        if (texCoords == null || texCoords.length != vertexCount) {
+            texCoords = new Point[vertexCount];
         }
         float volume = clamp(lowFreqVolume, 0f, 0.45f);
         float uTime = time * 0.24f;
@@ -443,7 +529,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
         float cos = (float) Math.cos(angle);
         float scale = Math.max(0.62f, 1.0f - volume * 2.0f);
         float texMax = TEXTURE_SIZE - 1f;
-        for (int i = 0; i < VERTEX_COUNT; i++) {
+        for (int i = 0; i < vertexCount; i++) {
             float u = baseUvs[i * 2];
             float v = baseUvs[i * 2 + 1];
             float cx = u - 0.2f;
@@ -651,6 +737,11 @@ public final class AMLLFluidBackground implements AutoCloseable {
         closeImage();
         texturePixelsABGR = null;
         controlPoints = null;
+        controlW = 0;
+        controlH = 0;
+        gridW = 0;
+        gridH = 0;
+        vertexCount = 0;
         indices = null;
         colors = null;
         baseUvs = null;
@@ -660,10 +751,14 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
     public static final class GuiRenderer implements AutoCloseable {
         private static final AtomicLong TEXTURE_ID_COUNTER = new AtomicLong();
+        private static final RenderPipeline AMLL_BACKGROUND_PIPELINE = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.GUI_TEXTURED_SNIPPET)
+                .withLocation(Identifier.parse("skija-test:pipeline/amll_background"))
+                .withFragmentShader(Identifier.parse("skija-test:core/amll_background"))
+                .build());
         private final AMLLFluidBackground background = new AMLLFluidBackground();
         private final String name;
-        private final float[] positions = new float[VERTEX_COUNT * 2];
-        private final float[] texCoords = new float[VERTEX_COUNT * 2];
+        private float[] positions = new float[0];
+        private float[] texCoords = new float[0];
         private DynamicTexture texture;
         private Identifier textureId;
         private float lastWidth = -1f;
@@ -676,10 +771,13 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
         public void rebuild(byte[] coverBytes, String seed) {
             background.rebuild(coverBytes, seed);
+            int size = Math.max(0, background.vertexCount() * 2);
+            positions = new float[size];
+            texCoords = new float[size];
             uploadTexture(background.copyTexturePixelsABGR());
             lastWidth = -1f;
             lastHeight = -1f;
-            ready = textureId != null;
+            ready = textureId != null && background.vertexCount() > 0;
         }
 
         public boolean ready() {
@@ -688,19 +786,26 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
         public boolean draw(GuiGraphicsExtractor g, float width, float height, float time, float lowFreqPulse) {
             if (!ready()) return false;
+            int size = background.vertexCount() * 2;
+            if (size <= 0) return false;
+            if (positions.length < size) positions = new float[size];
+            if (texCoords.length < size) texCoords = new float[size];
             if (Math.abs(width - lastWidth) > 0.5f || Math.abs(height - lastHeight) > 0.5f) {
                 if (!background.fillGpuPositions(width, height, positions)) return false;
                 lastWidth = width;
                 lastHeight = height;
             }
             if (!background.fillGpuTexCoords(time, lowFreqPulse, texCoords)) return false;
+            if (background.baseUvs == null) return false;
+            float volume = Math.max(0f, Math.min(0.45f, lowFreqPulse));
+            float alphaVolumeFactor = Math.max(0.5f, 1.0f - volume * 0.5f);
             AbstractTexture abstractTexture = Minecraft.getInstance().getTextureManager().getTexture(textureId);
             if (abstractTexture == null || abstractTexture.getTextureView() == null || abstractTexture.getSampler() == null) return false;
             Matrix3x2f pose = new Matrix3x2f(g.pose());
             ScreenRectangle scissor = g.scissorStack.peek();
             ScreenRectangle bounds = new ScreenRectangle(0, 0, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))).transformMaxBounds(pose);
             TextureSetup textureSetup = TextureSetup.singleTexture(abstractTexture.getTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-            g.guiRenderState.addGuiElement(new MeshRenderState(RenderPipelines.GUI_TEXTURED, textureSetup, pose, positions, texCoords, width, height, scissor, bounds));
+            g.guiRenderState.addGuiElement(new MeshRenderState(AMLL_BACKGROUND_PIPELINE, textureSetup, pose, positions, texCoords, background.baseUvs, alphaVolumeFactor, background.gridWidth(), background.gridHeight(), width, height, scissor, bounds));
             return true;
         }
 
@@ -744,13 +849,11 @@ public final class AMLLFluidBackground implements AutoCloseable {
         }
 
         private record MeshRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
-                                       float[] positions, float[] texCoords, float width, float height,
-                                       ScreenRectangle scissorArea, ScreenRectangle bounds)
+                                       float[] positions, float[] texCoords, float[] baseUvs, float alphaVolumeFactor,
+                                       int gridW, int gridH, float width, float height, ScreenRectangle scissorArea, ScreenRectangle bounds)
                 implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
             @Override
             public void buildVertices(VertexConsumer vertexConsumer) {
-                int gridW = AMLLFluidBackground.gridWidth();
-                int gridH = AMLLFluidBackground.gridHeight();
                 for (int y = 0; y < gridH - 1; y++) {
                     for (int x = 0; x < gridW - 1; x++) {
                         int p00 = y * gridW + x;
@@ -767,24 +870,12 @@ public final class AMLLFluidBackground implements AutoCloseable {
 
             private void addVertex(VertexConsumer vertexConsumer, int index) {
                 int i = index * 2;
+                int r = Math.max(0, Math.min(255, Math.round(baseUvs[i] * 255f)));
+                int c = Math.max(0, Math.min(255, Math.round(baseUvs[i + 1] * 255f)));
+                int b = Math.max(0, Math.min(255, Math.round(alphaVolumeFactor * 255f)));
                 vertexConsumer.addVertexWith2DPose(pose, positions[i], positions[i + 1])
                         .setUv(texCoords[i], texCoords[i + 1])
-                        .setColor(vignetteColor(i));
-            }
-
-            private int vignetteColor(int i) {
-                float nx = positions[i] / Math.max(1f, width) - 0.5f;
-                float ny = positions[i + 1] / Math.max(1f, height) - 0.5f;
-                float dist = (float) Math.sqrt(nx * nx + ny * ny);
-                float t = smoothstep(0.80f, 0.30f, dist);
-                float mask = 0.60f + t * 0.40f;
-                int c = Math.max(0, Math.min(255, Math.round(mask * 255f)));
-                return 0xFF000000 | (c << 16) | (c << 8) | c;
-            }
-
-            private float smoothstep(float edge0, float edge1, float x) {
-                float t = Math.max(0f, Math.min(1f, (x - edge0) / (edge1 - edge0)));
-                return t * t * (3f - 2f * t);
+                        .setColor(r, c, b, 255);
             }
         }
     }
