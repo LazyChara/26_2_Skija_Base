@@ -700,7 +700,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
             ScreenRectangle scissor = g.scissorStack.peek();
             ScreenRectangle bounds = new ScreenRectangle(0, 0, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))).transformMaxBounds(pose);
             TextureSetup textureSetup = TextureSetup.singleTexture(abstractTexture.getTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-            g.guiRenderState.addGuiElement(new MeshRenderState(RenderPipelines.GUI_TEXTURED, textureSetup, pose, positions, texCoords, scissor, bounds));
+            g.guiRenderState.addGuiElement(new MeshRenderState(RenderPipelines.GUI_TEXTURED, textureSetup, pose, positions, texCoords, width, height, scissor, bounds));
             return true;
         }
 
@@ -744,7 +744,7 @@ public final class AMLLFluidBackground implements AutoCloseable {
         }
 
         private record MeshRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
-                                       float[] positions, float[] texCoords,
+                                       float[] positions, float[] texCoords, float width, float height,
                                        ScreenRectangle scissorArea, ScreenRectangle bounds)
                 implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
             @Override
@@ -769,7 +769,22 @@ public final class AMLLFluidBackground implements AutoCloseable {
                 int i = index * 2;
                 vertexConsumer.addVertexWith2DPose(pose, positions[i], positions[i + 1])
                         .setUv(texCoords[i], texCoords[i + 1])
-                        .setColor(0xFFFFFFFF);
+                        .setColor(vignetteColor(i));
+            }
+
+            private int vignetteColor(int i) {
+                float nx = positions[i] / Math.max(1f, width) - 0.5f;
+                float ny = positions[i + 1] / Math.max(1f, height) - 0.5f;
+                float dist = (float) Math.sqrt(nx * nx + ny * ny);
+                float t = smoothstep(0.80f, 0.30f, dist);
+                float mask = 0.60f + t * 0.40f;
+                int c = Math.max(0, Math.min(255, Math.round(mask * 255f)));
+                return 0xFF000000 | (c << 16) | (c << 8) | c;
+            }
+
+            private float smoothstep(float edge0, float edge1, float x) {
+                float t = Math.max(0f, Math.min(1f, (x - edge0) / (edge1 - edge0)));
+                return t * t * (3f - 2f * t);
             }
         }
     }

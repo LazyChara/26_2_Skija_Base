@@ -38,6 +38,7 @@ public class MusicLoader {
     private static volatile float volume = 0.78f;
     private static volatile long currentMicros;
     private static volatile MusicTrack currentTrack;
+    private static volatile boolean playbackEnded;
     private static SourceDataLine currentLine;
 
     static {
@@ -185,6 +186,7 @@ public class MusicLoader {
         long serial = ++playbackSerial;
         currentTrack = track;
         paused = false;
+        playbackEnded = false;
         stopRequested = false;
         currentMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
         playbackThread = new Thread(() -> playbackLoop(track, Math.max(0f, startSeconds), serial), "SkijaTest-MusicLoader-Playback");
@@ -239,6 +241,7 @@ public class MusicLoader {
             playbackThread = null;
         }
         currentTrack = null;
+        playbackEnded = false;
         currentMicros = 0;
     }
 
@@ -257,6 +260,7 @@ public class MusicLoader {
     private static void playbackLoopJavaSound(MusicTrack track, float startSeconds, long serial) {
         AudioInputStream raw = null;
         AudioInputStream pcm = null;
+        boolean completed = false;
         try {
             raw = AudioSystem.getAudioInputStream(track.filePath().toFile());
             AudioFormat rawFormat = raw.getFormat();
@@ -309,7 +313,10 @@ public class MusicLoader {
                 }
                 currentMicros = startMicros + (long) (framesWritten * 1_000_000.0 / sampleRate);
             }
-            if (!isPlaybackCancelled(serial)) line.drain();
+            if (!isPlaybackCancelled(serial)) {
+                line.drain();
+                completed = true;
+            }
         } catch (InterruptedException ignored) {
         } catch (Exception e) {
             SkijaTestClient.LOGGER.warn("[MusicLoader] Failed to play {}", track.filePath(), e);
@@ -326,7 +333,10 @@ public class MusicLoader {
                 try { line.close(); } catch (Exception ignored) {}
             }
             if (serial == playbackSerial) currentLine = null;
-            if (serial == playbackSerial && !stopRequested) paused = true;
+            if (serial == playbackSerial && !stopRequested) {
+                paused = true;
+                playbackEnded = completed;
+            }
         }
     }
 
@@ -400,6 +410,7 @@ public class MusicLoader {
     private static void playbackLoopMp3(MusicTrack track, float startSeconds, long serial) {
         long startMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
         long playedMicros = 0L;
+        boolean completed = false;
         try (BufferedInputStream in = new BufferedInputStream(Files.newInputStream(track.filePath()))) {
             Bitstream bitstream = new Bitstream(in);
             Decoder decoder = new Decoder();
@@ -439,10 +450,14 @@ public class MusicLoader {
                 currentMicros = startMicros + playedMicros;
                 bitstream.closeFrame();
             }
-            if (line != null && !isPlaybackCancelled(serial)) line.drain();
+            if (line != null && !isPlaybackCancelled(serial)) {
+                line.drain();
+                completed = true;
+            }
             try { bitstream.close(); } catch (Exception ignored) {}
         } catch (InterruptedException ignored) {
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.warn("[MusicLoader] Failed to play {}", track.filePath(), e);
         } finally {
             SourceDataLine line = currentLine;
             if (line != null && serial == playbackSerial) {
@@ -450,13 +465,16 @@ public class MusicLoader {
                 try { line.close(); } catch (Exception ignored) {}
             }
             if (serial == playbackSerial) currentLine = null;
-            if (serial == playbackSerial && !stopRequested) paused = true;
+            if (serial == playbackSerial && !stopRequested) {
+                paused = true;
+                playbackEnded = completed;
+            }
         }
     }
 
-    private static byte[] shortsToLittleEndian(short[] samples, int len) {
-        byte[] out = new byte[len * 2];
-        for (int i = 0, j = 0; i < len; i++) {
+    private static byte[] shortsToLittleEndian(short[] samples, int sampleCount) {
+        byte[] out = new byte[sampleCount * 2];
+        for (int i = 0, j = 0; i < sampleCount; i++) {
             short s = samples[i];
             out[j++] = (byte) (s & 0xFF);
             out[j++] = (byte) ((s >>> 8) & 0xFF);
@@ -498,6 +516,12 @@ public class MusicLoader {
 
     public static MusicTrack getCurrentTrack() {
         return currentTrack;
+    }
+
+    public static synchronized boolean consumePlaybackEnded(MusicTrack track) {
+        if (!playbackEnded || currentTrack != track) return false;
+        playbackEnded = false;
+        return true;
     }
 
     public record MusicTrack(

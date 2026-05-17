@@ -58,6 +58,10 @@ public class Musicpage extends Screen {
     private static final long ENTRY_ANIM_MS = 420L;
     private static final long RETURN_ANIM_MS = 340L;
     private static final long CLOSE_ANIM_MS = 260L;
+    private static final long LYRIC_LAYOUT_ANIM_MS = 500L;
+    private static final long LYRIC_HIDE_ANIM_MS = 250L;
+    private static final long LYRIC_SHOW_DELAY_MS = 250L;
+    private static final long LYRIC_SHOW_ANIM_MS = 500L;
     private static final long BG_INTERVAL_PLAYING_MS = 66L;
     private static final long BG_INTERVAL_IDLE_MS = 160L;
     private static final long BG_INTERVAL_EXIT_MS = 120L;
@@ -90,6 +94,11 @@ public class Musicpage extends Screen {
     private static final String ICON_SPEAKER3_W3 = "M35.2362 28.1007C34.7363 27.7992 34.6569 27.1803 34.9981 26.6249C36.1883 24.7286 36.9104 22.4196 36.9104 19.9122C36.9104 17.397 36.1883 15.0881 34.9981 13.1917C34.6569 12.6362 34.7363 12.0174 35.2362 11.7159C35.7123 11.4302 36.3073 11.5651 36.6088 12.0571C38.0133 14.2866 38.8702 16.9765 38.8702 19.9122C38.8702 22.8401 38.0291 25.5379 36.6088 27.7675C36.3073 28.2515 35.7123 28.3864 35.2362 28.1007Z";
 
     private static final String ICON_LOSSLESS = "M16.0117 1.81812C18.4258 1.81812 19.8776 4.78099 20.958 7.92092L21.0631 8.23024L21.1659 8.54011L21.2666 8.84995C21.5987 9.88202 21.8972 10.9037 22.1828 11.8167C22.839 8.96008 22.4949 8.34671 23.1979 8.34671C23.4594 8.34671 23.724 8.53256 23.724 8.87123C23.724 9.0083 23.5105 10.461 23.2136 11.9166L23.1588 12.1809L23.1023 12.4436C23.0068 12.8791 22.9051 13.3002 22.8009 13.6704C25.8224 21.9469 28.0659 11.0453 28.3194 8.81691C28.3564 8.49556 28.5879 8.34672 28.8219 8.34672C29.1344 8.34672 29.3907 8.59283 29.3418 8.96318C28.8009 12.5671 27.9689 18.1818 24.5482 18.1818C22.6604 18.1818 21.5992 16.6374 20.7611 14.8678C20.179 13.6722 19.6841 12.2511 19.2288 10.8221L19.1203 10.4791C19.0844 10.3648 19.0487 10.2505 19.0132 10.1364L18.9073 9.79479C17.8713 6.44275 16.9926 3.33702 15.6457 3.33702C14.9875 3.33702 14.4995 4.05555 14.4657 4.05555C14.4036 4.05555 14.3548 3.76279 13.7401 2.96069C14.3251 2.26231 15.1314 1.81812 16.0117 1.81812ZM4.80934 1.82692C10.1957 1.82692 10.6747 16.6849 13.7232 16.6849C14.0811 16.6849 14.4669 16.4581 14.8886 15.9443C15.122 16.3577 15.3613 16.7247 15.6089 17.0478C15.0004 17.774 14.2433 18.1812 13.2952 18.1812C9.88906 18.1807 8.42559 12.2177 7.16605 8.19178C6.86941 9.48319 6.71544 10.6519 6.65516 11.1766C6.61775 11.5101 6.38397 11.662 6.14846 11.662C5.88728 11.662 5.62398 11.4752 5.62398 11.1416C5.62398 11.1167 5.62545 11.091 5.62848 11.0646C5.80292 9.74118 6.15443 7.73614 6.54802 6.3382C6.02411 4.90309 5.36971 3.33458 4.40561 3.33458C2.45924 3.33458 1.34461 8.44844 1.03117 11.1766C0.993764 11.5101 0.759979 11.662 0.524468 11.662C0.263303 11.662 0 11.4752 0 11.1416C0 11.1167 0.00146422 11.091 0.00449843 11.0646C0.0496669 10.7219 0.0980906 10.373 0.15073 10.0213L0.196904 9.71916C0.204779 9.66871 0.212746 9.61823 0.220807 9.56772L0.27033 9.26437C0.887195 5.57133 2.03712 1.82692 4.80934 1.82692ZM10.3981 1.81878C11.3654 1.81878 12.4031 2.34503 13.2976 3.57969C13.3476 3.63964 13.849 4.45427 14.0072 4.73669C14.554 5.77231 15.0302 7.038 15.4694 8.354L15.5832 8.69833C16.8447 12.5534 17.8174 16.7028 19.3326 16.7028C19.6918 16.7028 20.0814 16.4697 20.5126 15.9442C20.746 16.3575 20.9852 16.7245 21.2329 17.0476C20.6259 17.7724 19.8691 18.1812 18.9192 18.1812C13.565 18.1804 12.983 3.3313 10.0333 3.3313C9.36758 3.3313 8.87559 4.05559 8.84162 4.05559C8.7795 4.05559 8.7307 3.76287 8.11611 2.96083C8.7168 2.24348 9.52906 1.81878 10.3981 1.81878Z";
+    private static final String ICON_LYRICS_OFF_AMLL = "M22.8594 53.9102C22 53.9102 21.3229 53.6302 20.8281 53.0703C20.3464 52.5104 20.1055 51.7617 20.1055 50.8242V46.1953H18.9727C17.1237 46.1953 15.5156 45.8242 14.1484 45.082C12.7812 44.3398 11.7201 43.2721 10.9648 41.8789C10.2227 40.4857 9.85156 38.8125 9.85156 36.8594V21.5664C9.85156 19.6133 10.2161 17.9401 10.9453 16.5469C11.6875 15.1536 12.7552 14.0859 14.1484 13.3438C15.5417 12.5885 17.2214 12.2109 19.1875 12.2109H44.793C46.7721 12.2109 48.4518 12.5885 49.832 13.3438C51.2253 14.0859 52.2865 15.1536 53.0156 16.5469C53.7578 17.9401 54.1289 19.6133 54.1289 21.5664V36.8594C54.1289 38.8125 53.7578 40.4857 53.0156 41.8789C52.2865 43.2721 51.2253 44.3398 49.832 45.082C48.4518 45.8242 46.7721 46.1953 44.793 46.1953H33.0742L26.4336 52.0547C25.7044 52.6927 25.0729 53.1615 24.5391 53.4609C24.0182 53.7604 23.4583 53.9102 22.8594 53.9102ZM23.9141 49.0469L30.0859 42.9727C30.5156 42.5299 30.9193 42.237 31.2969 42.0938C31.6745 41.9375 32.1758 41.8594 32.8008 41.8594H44.5977C46.3424 41.8594 47.6445 41.4232 48.5039 40.5508C49.3633 39.6784 49.793 38.3828 49.793 36.6641V21.7422C49.793 20.0365 49.3633 18.7474 48.5039 17.875C47.6445 17.0026 46.3424 16.5664 44.5977 16.5664H19.3828C17.625 16.5664 16.3164 17.0026 15.457 17.875C14.6107 18.7474 14.1875 20.0365 14.1875 21.7422V36.6641C14.1875 38.3828 14.6107 39.6784 15.457 40.5508C16.3164 41.4232 17.625 41.8594 19.3828 41.8594H22.2344C22.8073 41.8594 23.2305 41.9896 23.5039 42.25C23.7773 42.4974 23.9141 42.9271 23.9141 43.5391V49.0469ZM22.4492 27.1914C22.4492 25.9935 22.8529 25.0104 23.6602 24.2422C24.4674 23.474 25.4701 23.0898 26.668 23.0898C28.0221 23.0898 29.1029 23.5716 29.9102 24.5352C30.7305 25.4857 31.1406 26.6576 31.1406 28.0508C31.1406 29.2096 30.9323 30.2383 30.5156 31.1367C30.112 32.0221 29.5911 32.7708 28.9531 33.3828C28.3281 33.9948 27.6771 34.457 27 34.7695C26.3229 35.082 25.7174 35.2383 25.1836 35.2383C24.8841 35.2383 24.6367 35.1536 24.4414 34.9844C24.2461 34.8151 24.1484 34.5938 24.1484 34.3203C24.1484 34.0859 24.2135 33.8906 24.3438 33.7344C24.487 33.5651 24.7214 33.4414 25.0469 33.3633C25.5677 33.2331 26.0625 33.0312 26.5312 32.7578C27.013 32.4714 27.4362 32.1328 27.8008 31.7422C28.1654 31.3385 28.4453 30.8828 28.6406 30.375H28.3867C28.1263 30.7005 27.7943 30.9284 27.3906 31.0586C26.987 31.1758 26.5573 31.2344 26.1016 31.2344C25.0078 31.2344 24.1224 30.8503 23.4453 30.082C22.7812 29.3008 22.4492 28.3372 22.4492 27.1914ZM33.0742 27.1914C33.0742 25.9935 33.4714 25.0104 34.2656 24.2422C35.0729 23.474 36.082 23.0898 37.293 23.0898C38.6471 23.0898 39.7279 23.5716 40.5352 24.5352C41.3555 25.4857 41.7656 26.6576 41.7656 28.0508C41.7656 29.2096 41.5573 30.2383 41.1406 31.1367C40.737 32.0221 40.2161 32.7708 39.5781 33.3828C38.9531 33.9948 38.2956 34.457 37.6055 34.7695C36.9284 35.082 36.3294 35.2383 35.8086 35.2383C35.5091 35.2383 35.2617 35.1536 35.0664 34.9844C34.8711 34.8151 34.7734 34.5938 34.7734 34.3203C34.7734 34.0859 34.8385 33.8906 34.9688 33.7344C35.112 33.5651 35.3529 33.4414 35.6914 33.3633C36.1992 33.2331 36.6875 33.0312 37.1562 32.7578C37.638 32.4714 38.0612 32.1328 38.4258 31.7422C38.7904 31.3385 39.0703 30.8828 39.2656 30.375H39.0117C38.7513 30.7005 38.4193 30.9284 38.0156 31.0586C37.612 31.1758 37.1823 31.2344 36.7266 31.2344C35.6328 31.2344 34.7474 30.8503 34.0703 30.082C33.4062 29.3008 33.0742 28.3372 33.0742 27.1914Z";
+    private static final String ICON_LYRICS_ON_AMLL_0 = "M1.91256 7.67068C0 11.0858 0 15.6405 0 24.75V39.25C0 48.3595 0 52.9142 1.91256 56.3293C3.26425 58.7429 5.25707 60.7357 7.67068 62.0874C11.0858 64 15.6405 64 24.75 64H39.25C48.3595 64 52.9142 64 56.3293 62.0874C58.7429 60.7357 60.7357 58.7429 62.0874 56.3293C64 52.9142 64 48.3595 64 39.25V24.75C64 15.6405 64 11.0858 62.0874 7.67068C60.7357 5.25707 58.7429 3.26425 56.3293 1.91256C52.9142 0 48.3595 0 39.25 0H24.75C15.6405 0 11.0858 0 7.67068 1.91256C5.25707 3.26425 3.26425 5.25707 1.91256 7.67068ZM20.8281 53.0703C21.3229 53.6302 22 53.9102 22.8594 53.9102C23.4583 53.9102 24.0182 53.7604 24.5391 53.4609C25.0729 53.1615 25.7044 52.6927 26.4336 52.0547L33.0742 46.1953H44.793C46.7721 46.1953 48.4518 45.8242 49.832 45.082C51.2253 44.3398 52.2865 43.2721 53.0156 41.8789C53.7578 40.4857 54.1289 38.8125 54.1289 36.8594V21.5664C54.1289 19.6133 53.7578 17.9401 53.0156 16.5469C52.2865 15.1536 51.2253 14.0859 49.832 13.3438C48.4518 12.5885 46.7721 12.2109 44.793 12.2109H19.1875C17.2214 12.2109 15.5417 12.5885 14.1484 13.3438C12.7552 14.0859 11.6875 15.1536 10.9453 16.5469C10.2161 17.9401 9.85156 19.6133 9.85156 21.5664V36.8594C9.85156 38.8125 10.2227 40.4857 10.9648 41.8789C11.7201 43.2721 12.7812 44.3398 14.1484 45.082C15.5156 45.8242 17.1237 46.1953 18.9727 46.1953H20.1055V50.8242C20.1055 51.7617 20.3464 52.5104 20.8281 53.0703Z";
+    private static final String ICON_LYRICS_ON_AMLL_1 = "M22.4492 27.1914C22.4492 25.9935 22.8529 25.0104 23.6602 24.2422C24.4674 23.474 25.4701 23.0898 26.668 23.0898C28.0221 23.0898 29.1029 23.5716 29.9102 24.5352C30.7305 25.4857 31.1406 26.6576 31.1406 28.0508C31.1406 29.2096 30.9323 30.2383 30.5156 31.1367C30.112 32.0221 29.5911 32.7708 28.9531 33.3828C28.3281 33.9948 27.6771 34.457 27 34.7695C26.3229 35.082 25.7174 35.2383 25.1836 35.2383C24.8841 35.2383 24.6367 35.1536 24.4414 34.9844C24.2461 34.8151 24.1484 34.5938 24.1484 34.3203C24.1484 34.0859 24.2135 33.8906 24.3438 33.7344C24.487 33.5651 24.7214 33.4414 25.0469 33.3633C25.5677 33.2331 26.0625 33.0312 26.5312 32.7578C27.013 32.4714 27.4362 32.1328 27.8008 31.7422C28.1654 31.3385 28.4453 30.8828 28.6406 30.375H28.3867C28.1263 30.7005 27.7943 30.9284 27.3906 31.0586C26.987 31.1758 26.5573 31.2344 26.1016 31.2344C25.0078 31.2344 24.1224 30.8503 23.4453 30.082C22.7812 29.3008 22.4492 28.3372 22.4492 27.1914ZM33.0742 27.1914C33.0742 25.9935 33.4714 25.0104 34.2656 24.2422C35.0729 23.474 36.082 23.0898 37.293 23.0898C38.6471 23.0898 39.7279 23.5716 40.5352 24.5352C41.3555 25.4857 41.7656 26.6576 41.7656 28.0508C41.7656 29.2096 41.5573 30.2383 41.1406 31.1367C40.737 32.0221 40.2161 32.7708 39.5781 33.3828C38.9531 33.9948 38.2956 34.457 37.6055 34.7695C36.9284 35.082 36.3294 35.2383 35.8086 35.2383C35.5091 35.2383 35.2617 35.1536 35.0664 34.9844C34.8711 34.8151 34.7734 34.5938 34.7734 34.3203C34.7734 34.0859 34.8385 33.8906 34.9688 33.7344C35.112 33.5651 35.3529 33.4414 35.6914 33.3633C36.1992 33.2331 36.6875 33.0312 37.1562 32.7578C37.638 32.4714 38.0612 32.1328 38.4258 31.7422C38.7904 31.3385 39.0703 30.8828 39.2656 30.375H39.0117C38.7513 30.7005 38.4193 30.9284 38.0156 31.0586C37.612 31.1758 37.1823 31.2344 36.7266 31.2344C35.6328 31.2344 34.7474 30.8503 34.0703 30.082C33.4062 29.3008 33.0742 28.3372 33.0742 27.1914Z";
+    private static final String ICON_PLAYLIST_OFF_AMLL = "M23.9922 21.8594C23.4062 21.8594 22.9115 21.6641 22.5078 21.2734C22.1172 20.8698 21.9219 20.375 21.9219 19.7891C21.9219 19.2161 22.1172 18.7279 22.5078 18.3242C22.9115 17.9206 23.4062 17.7188 23.9922 17.7188H50.418C50.9909 17.7188 51.4792 17.9206 51.8828 18.3242C52.2865 18.7279 52.4883 19.2161 52.4883 19.7891C52.4883 20.375 52.2865 20.8698 51.8828 21.2734C51.4792 21.6641 50.9909 21.8594 50.418 21.8594H23.9922ZM23.9922 33.9883C23.4062 33.9883 22.9115 33.7865 22.5078 33.3828C22.1172 32.9792 21.9219 32.4909 21.9219 31.918C21.9219 31.3451 22.1172 30.8633 22.5078 30.4727C22.9115 30.069 23.4062 29.8672 23.9922 29.8672H50.418C50.9909 29.8672 51.4792 30.069 51.8828 30.4727C52.2865 30.8633 52.4883 31.3451 52.4883 31.918C52.4883 32.5039 52.2865 32.9987 51.8828 33.4023C51.4792 33.793 50.9909 33.9883 50.418 33.9883H23.9922ZM23.9922 46.1172C23.4062 46.1172 22.9115 45.9219 22.5078 45.5312C22.1172 45.1276 21.9219 44.6328 21.9219 44.0469C21.9219 43.474 22.1172 42.9857 22.5078 42.582C22.9115 42.1784 23.4062 41.9766 23.9922 41.9766H50.418C50.9909 41.9766 51.4792 42.1784 51.8828 42.582C52.2865 42.9857 52.4883 43.474 52.4883 44.0469C52.4883 44.6328 52.2865 45.1276 51.8828 45.5312C51.4792 45.9219 50.9909 46.1172 50.418 46.1172H23.9922ZM14.4805 22.7383C13.6602 22.7383 12.957 22.4518 12.3711 21.8789C11.7982 21.306 11.5117 20.6094 11.5117 19.7891C11.5117 18.9688 11.7982 18.2721 12.3711 17.6992C12.957 17.1263 13.6602 16.8398 14.4805 16.8398C15.2878 16.8398 15.9844 17.1263 16.5703 17.6992C17.1562 18.2721 17.4492 18.9688 17.4492 19.7891C17.4492 20.6094 17.1562 21.306 16.5703 21.8789C15.9844 22.4518 15.2878 22.7383 14.4805 22.7383ZM14.4805 34.8867C13.6602 34.8867 12.957 34.5938 12.3711 34.0078C11.7982 33.4219 11.5117 32.7253 11.5117 31.918C11.5117 31.1107 11.7982 30.4141 12.3711 29.8281C12.957 29.2422 13.6602 28.9492 14.4805 28.9492C15.2878 28.9492 15.9844 29.2422 16.5703 29.8281C17.1562 30.4141 17.4492 31.1107 17.4492 31.918C17.4492 32.7253 17.1562 33.4219 16.5703 34.0078C15.9844 34.5938 15.2878 34.8867 14.4805 34.8867ZM14.4805 47.0156C13.6602 47.0156 12.957 46.7227 12.3711 46.1367C11.7982 45.5638 11.5117 44.8672 11.5117 44.0469C11.5117 43.2266 11.7982 42.5299 12.3711 41.957C12.957 41.3841 13.6602 41.0977 14.4805 41.0977C15.2878 41.0977 15.9844 41.3841 16.5703 41.957C17.1562 42.5299 17.4492 43.2266 17.4492 44.0469C17.4492 44.8672 17.1562 45.5638 16.5703 46.1367C15.9844 46.7227 15.2878 47.0156 14.4805 47.0156Z";
+    private static final String ICON_PLAYLIST_ON_AMLL = "M1.91256 7.67068C0 11.0858 0 15.6405 0 24.75V39.25C0 48.3595 0 52.9142 1.91256 56.3293C3.26425 58.7429 5.25707 60.7357 7.67068 62.0874C11.0858 64 15.6405 64 24.75 64H39.25C48.3595 64 52.9142 64 56.3293 62.0874C58.7429 60.7357 60.7357 58.7429 62.0874 56.3293C64 52.9142 64 48.3595 64 39.25V24.75C64 15.6405 64 11.0858 62.0874 7.67068C60.7357 5.25706 58.7429 3.26425 56.3293 1.91256C52.9142 0 48.3595 0 39.25 0H24.75C15.6405 0 11.0858 0 7.67068 1.91256C5.25707 3.26425 3.26425 5.25706 1.91256 7.67068ZM22.5078 21.2734C22.9115 21.6641 23.4062 21.8594 23.9922 21.8594H50.418C50.9909 21.8594 51.4792 21.6641 51.8828 21.2734C52.2865 20.8698 52.4883 20.375 52.4883 19.7891C52.4883 19.2161 52.2865 18.7279 51.8828 18.3242C51.4792 17.9206 50.9909 17.7188 50.418 17.7188H23.9922C23.4062 17.7188 22.9115 17.9206 22.5078 18.3242C22.1172 18.7279 21.9219 19.2161 21.9219 19.7891C21.9219 20.375 22.1172 20.8698 22.5078 21.2734ZM22.5078 33.3828C22.9115 33.7865 23.4062 33.9883 23.9922 33.9883H50.418C50.9909 33.9883 51.4792 33.793 51.8828 33.4023C52.2865 32.9987 52.4883 32.5039 52.4883 31.918C52.4883 31.3451 52.2865 30.8633 51.8828 30.4727C51.4792 30.069 50.9909 29.8672 50.418 29.8672H23.9922C23.4062 29.8672 22.9115 30.069 22.5078 30.4727C22.1172 30.8633 21.9219 31.3451 21.9219 31.918C21.9219 32.4909 22.1172 32.9792 22.5078 33.3828ZM22.5078 45.5312C22.9115 45.9219 23.4062 46.1172 23.9922 46.1172H50.418C50.9909 46.1172 51.4792 45.9219 51.8828 45.5312C52.2865 45.1276 52.4883 44.6328 52.4883 44.0469C52.4883 43.474 52.2865 42.9857 51.8828 42.582C51.4792 42.1784 50.9909 41.9766 50.418 41.9766H23.9922C23.4062 41.9766 22.9115 42.1784 22.5078 42.582C22.1172 42.9857 21.9219 43.474 21.9219 44.0469C21.9219 44.6328 22.1172 45.1276 22.5078 45.5312ZM12.3711 21.8789C12.957 22.4518 13.6602 22.7383 14.4805 22.7383C15.2878 22.7383 15.9844 22.4518 16.5703 21.8789C17.1562 21.306 17.4492 20.6094 17.4492 19.7891C17.4492 18.9688 17.1562 18.2721 16.5703 17.6992C15.9844 17.1263 15.2878 16.8398 14.4805 16.8398C13.6602 16.8398 12.957 17.1263 12.3711 17.6992C11.7982 18.2721 11.5117 18.9688 11.5117 19.7891C11.5117 20.6094 11.7982 21.306 12.3711 21.8789ZM12.3711 34.0078C12.957 34.5938 13.6602 34.8867 14.4805 34.8867C15.2878 34.8867 15.9844 34.5938 16.5703 34.0078C17.1562 33.4219 17.4492 32.7253 17.4492 31.918C17.4492 31.1107 17.1562 30.4141 16.5703 29.8281C15.9844 29.2422 15.2878 28.9492 14.4805 28.9492C13.6602 28.9492 12.957 29.2422 12.3711 29.8281C11.7982 30.4141 11.5117 31.1107 11.5117 31.918C11.5117 32.7253 11.7982 33.4219 12.3711 34.0078ZM12.3711 46.1367C12.957 46.7227 13.6602 47.0156 14.4805 47.0156C15.2878 47.0156 15.9844 46.7227 16.5703 46.1367C17.1562 45.5638 17.4492 44.8672 17.4492 44.0469C17.4492 43.2266 17.1562 42.5299 16.5703 41.957C15.9844 41.3841 15.2878 41.0977 14.4805 41.0977C13.6602 41.0977 12.957 41.3841 12.3711 41.957C11.7982 42.5299 11.5117 43.2266 11.5117 44.0469C11.5117 44.8672 11.7982 45.5638 12.3711 46.1367Z";
 
     private SkijaRenderer renderer;
     private SkijaRenderer bgRenderer;
@@ -131,7 +140,13 @@ public class Musicpage extends Screen {
 
     private boolean shuffleMode = false;
     private boolean repeatMode = false;
+    private boolean lyricsVisible = true;
     private boolean playlistOpen = false;
+    private float lyricLayoutVisual = 1f;
+    private float lyricLayoutAnimStart = 1f;
+    private float lyricOpacityVisual = 1f;
+    private float lyricOpacityAnimStart = 1f;
+    private long lyricViewAnimStartedAt = 0L;
     private float volume = 0.78f;
     private boolean draggingVolume = false;
     private boolean draggingProgress = false;
@@ -140,11 +155,32 @@ public class Musicpage extends Screen {
     private boolean returningToMain = false;
     private boolean closingPage = false;
     private int hoveredControl = -1;
+    private boolean hoveredProgress = false;
+    private boolean hoveredVolume = false;
+    private boolean hoveredLyrics = false;
+    private final float[] controlPress = new float[5];
+    private final float[] controlHover = new float[5];
+    private float progressVisual;
+    private float volumeVisual;
+    private float progressBounceX;
+    private float volumeBounceX;
+    private SkijaRenderer interludeDotRenderer;
+    private float interludeDotScale = -1f;
+    private float interludeY;
+    private float interludeVelocityY;
+    private float interludeOpacity;
+    private float interludeVelocityOpacity;
+    private float interludeStartTime;
+    private float interludeEndTime;
+    private float interludeCurrentTime;
+    private float interludeSlotVisual;
+    private float interludeSlotVelocity;
 
     private float volX, volY, volW, volH;
     private float progX, progY, progW, progH;
     private float prevX, prevY, nextX, nextY, playX, playY, btnR;
     private float modeX, modeY, repeatX, repeatY, listX, listY, listW, listH;
+    private float lyricToggleX, lyricToggleY, lyricToggleW, lyricToggleH;
     private float controlsLayerX, controlsLayerY, controlsLayerW, controlsLayerH;
     private float lyricsLayerX, lyricsLayerY, lyricsLayerW, lyricsLayerH;
     private float layoutLeftX, layoutLeftW, layoutControlY;
@@ -190,6 +226,11 @@ public class Musicpage extends Screen {
         lastProgressRender = 0;
         lastBgRender = 0;
         lastDragRender = 0;
+        lyricLayoutVisual = lyricsVisible ? 1f : 0f;
+        lyricLayoutAnimStart = lyricLayoutVisual;
+        lyricOpacityVisual = lyricLayoutVisual;
+        lyricOpacityAnimStart = lyricOpacityVisual;
+        lyricViewAnimStartedAt = openedAt;
         lyricRenderScroll = 0f;
         lyricLayerBlitOffsetY = 0f;
         lyricSnapOnNextRender = true;
@@ -198,11 +239,17 @@ public class Musicpage extends Screen {
         backgroundPulseVisual = 0f;
         lastActiveLyric = -1;
         lastRenderedSecond = -1;
+        interludeSlotVisual = 0f;
+        interludeSlotVelocity = 0f;
+        interludeOpacity = 0f;
+        interludeVelocityOpacity = 0f;
+        interludeVelocityY = 0f;
         dirty = true;
         controlsLayerDirty = true;
         lyricsLayerDirty = true;
         clampTrackIndex();
         refreshTrackCache();
+        ensureInterludeDotRenderer(pageScale());
     }
 
     @Override
@@ -232,6 +279,8 @@ public class Musicpage extends Screen {
             if (!exiting) handleMouse(mx, my);
             float dt = Math.min(0.05f, Math.max(0f, (now - lastFrame) / 1000f));
             lastFrame = now;
+            if (!exiting) updateLyricViewAnimation(now);
+            if (!exiting && updateControlAnimations(dt, pageScale())) controlsLayerDirty = true;
             if (dirty) {
                 renderStaticPage(now);
                 controlsLayerDirty = true;
@@ -239,18 +288,22 @@ public class Musicpage extends Screen {
                 dirty = false;
             }
             if (!exiting && currentUiTrack != null) {
-                float currentSeconds = displayedElapsedSeconds(currentUiTrack, now);
-                int currentSecond = (int) currentSeconds;
-                int active = activeLyricIndex(currentSeconds);
-                if (active != lastActiveLyric) {
-                    if (!useLineLyricTextures()) lyricsLayerDirty = true;
-                    lastActiveLyric = active;
-                }
-                updateLyricAnimation(active, pageScale(), dt);
-                if (MusicLoader.isPlaying(currentUiTrack) && (currentSecond != lastRenderedSecond || now - lastProgressRender >= 250L)) {
-                    controlsLayerDirty = true;
-                    lastRenderedSecond = currentSecond;
-                    lastProgressRender = now;
+                if (MusicLoader.consumePlaybackEnded(currentUiTrack)) {
+                    handlePlaybackEnded();
+                } else {
+                    float currentSeconds = displayedElapsedSeconds(currentUiTrack, now);
+                    int currentSecond = (int) currentSeconds;
+                    int active = activeLyricIndex(currentSeconds);
+                    if (active != lastActiveLyric) {
+                        if (!useLineLyricTextures()) lyricsLayerDirty = true;
+                        lastActiveLyric = active;
+                    }
+                    updateLyricAnimation(active, currentSeconds, pageScale(), dt);
+                    if (MusicLoader.isPlaying(currentUiTrack) && (currentSecond != lastRenderedSecond || now - lastProgressRender >= 250L)) {
+                        controlsLayerDirty = true;
+                        lastRenderedSecond = currentSecond;
+                        lastProgressRender = now;
+                    }
                 }
             }
             if (!exiting) {
@@ -411,15 +464,16 @@ public class Musicpage extends Screen {
 
     private void renderAMLLStatic(MusicLoader.MusicTrack track, Typeface tf, long now) {
         float s = pageScale();
-        float leftX = Math.max(22f * s, width * 0.075f);
-        float leftW = Math.min(width * 0.36f, 430f * s);
-        float coverSize = Math.min(leftW, height * 0.35f);
-        coverSize = Math.max(82f * s, coverSize);
+        float leftW = Math.min(height * 0.50f, width * 0.38f);
+        leftW = Math.max(220f * s, leftW);
+        float baseLeftX = Math.max(22f * s, (width * 0.45f - leftW) * 0.5f);
+        float leftX = baseLeftX;
+        float coverSize = leftW;
         float coverY = Math.max(22f * s, height * 0.070f);
         float infoY = coverY + coverSize + 18f * s;
         float controlY = 0f;
 
-        float rightX = Math.max(width * 0.48f, leftX + leftW + 54f * s);
+        float rightX = Math.max(width * 0.48f, baseLeftX + leftW + 54f * s);
         float rightW = Math.max(140f * s, width - rightX - 42f * s);
         float lyricTop = Math.max(20f * s, height * 0.075f);
         float lyricH = height - lyricTop - 28f * s;
@@ -444,8 +498,8 @@ public class Musicpage extends Screen {
         String qualityLabel = track.qualityLabel();
         float badgeW = qualityLabel == null || qualityLabel.isBlank() ? 0f : losslessBadgeWidth(qualityLabel, tf, s);
         float badgeX = leftX + (leftW - badgeW) * 0.5f;
-        float badgeY = barY + 10f * s;
-        controlY = barY + 34f * s + badgeH + 42f * s;
+        float badgeY = barY + 21f * s;
+        controlY = barY + 21f * s + badgeH + 42f * s;
         float maxControlY = height - 86f * s;
         if (controlY > maxControlY) {
             controlY = maxControlY;
@@ -481,16 +535,20 @@ public class Musicpage extends Screen {
     }
 
     private void renderProgress(float leftX, float leftW, MusicLoader.MusicTrack track, Typeface tf, long now, float s) {
-        float coverSize = Math.min(leftW, height * 0.35f);
-        coverSize = Math.max(82f * s, coverSize);
+        float coverSize = leftW;
         float coverY = Math.max(22f * s, height * 0.070f);
         float infoY = coverY + coverSize + 18f * s;
         float elapsed = displayedElapsedSeconds(track, now);
         float duration = Math.max(1, track.duration());
         float progress = clamp(elapsed / duration, 0f, 1f);
         float barY = infoY + 42f * s;
-        renderer.drawRoundedRect(leftX, barY, leftW, 5f * s, 2.5f * s, W30);
-        if (progress > 0f) renderer.drawRoundedRect(leftX, barY, Math.max(5f * s, leftW * progress), 5f * s, 2.5f * s, W88);
+        float minH = 5f * s;
+        float maxH = 15.5f * s;
+        float visualH = minH + (maxH - minH) * progressVisual;
+        float visualY = barY + (minH - visualH) * 0.5f;
+        float visualX = leftX + progressBounceX;
+        renderer.drawRoundedRect(visualX, visualY, leftW, visualH, visualH * 0.5f, W30);
+        if (progress > 0f) renderer.drawRoundedRect(visualX, visualY, Math.max(visualH, leftW * progress), visualH, visualH * 0.5f, withAlpha(WHITE, 0.40f + 0.14f * progressVisual));
         renderer.drawText(formatTime((int) elapsed), leftX, barY + 14f * s, tf, 8.5f * s, W70);
         String remain = "-" + formatTime(Math.max(0, track.duration() - (int) elapsed));
         float remainW = renderer.measureText(remain, tf, 8.5f * s);
@@ -498,7 +556,7 @@ public class Musicpage extends Screen {
         progX = leftX;
         progY = barY;
         progW = leftW;
-        progH = 16f * s;
+        progH = 20f * s;
     }
 
     private void renderCover(float x, float y, float size, float s) {
@@ -535,10 +593,10 @@ public class Musicpage extends Screen {
 
     private void renderControls(float x, float y, float w, float s, Typeface tf) {
         float buttonGap = w * 0.205f;
-        float hoverR = clamp(buttonGap * 0.43f, 24f * s, 36f * s);
-        float toggleSize = clamp(buttonGap * 0.46f, 30f * s, 40f * s);
-        float transportSize = clamp(buttonGap * 0.66f, 42f * s, 56f * s);
-        float playSize = clamp(buttonGap * 0.56f, 40f * s, 52f * s);
+        float hoverR = clamp(buttonGap * 0.44f, 28f * s, 42f * s);
+        float toggleSize = clamp(buttonGap * 0.45f, 34f * s, 52f * s);
+        float transportSize = clamp(buttonGap * 0.64f, 52f * s, 82f * s);
+        float playSize = clamp(buttonGap * 0.52f, 48f * s, 70f * s);
         btnR = hoverR;
         float buttonsY = y + 16f * s;
         modeX = x + w * 0.09f;
@@ -552,11 +610,11 @@ public class Musicpage extends Screen {
         repeatX = x + w * 0.91f;
         repeatY = buttonsY;
 
-        drawShuffleButton(modeX, modeY, toggleSize, shuffleMode, hoveredControl == 0, hoverR);
-        drawPrevNext(prevX, prevY, transportSize, false, hoveredControl == 1, hoverR);
-        drawPlayPause(playX, playY, playSize, !MusicLoader.isPlaying(currentUiTrack), hoveredControl == 2, hoverR);
-        drawPrevNext(nextX, nextY, transportSize, true, hoveredControl == 3, hoverR);
-        drawRepeatButton(repeatX, repeatY, toggleSize, repeatMode, hoveredControl == 4, hoverR);
+        drawShuffleButton(modeX, modeY, toggleSize * controlScale(0), shuffleMode, controlHover[0] > 0.01f, hoverR * controlHoverRadius(0));
+        drawPrevNext(prevX, prevY, transportSize * controlScale(1), false, controlHover[1] > 0.01f, hoverR * controlHoverRadius(1));
+        drawPlayPause(playX, playY, playSize * controlScale(2), !MusicLoader.isPlaying(currentUiTrack), controlHover[2] > 0.01f, hoverR * controlHoverRadius(2));
+        drawPrevNext(nextX, nextY, transportSize * controlScale(3), true, controlHover[3] > 0.01f, hoverR * controlHoverRadius(3));
+        drawRepeatButton(repeatX, repeatY, toggleSize * controlScale(4), repeatMode, controlHover[4] > 0.01f, hoverR * controlHoverRadius(4));
 
         volume = MusicLoader.getVolume();
         volX = x + w * 0.17f;
@@ -565,8 +623,11 @@ public class Musicpage extends Screen {
         volH = 8f * s;
         float volCy = volY + volH * 0.5f;
         drawSpeaker(x + w * 0.08f, volCy, 13.5f * s, AMLL_VOLUME);
-        renderer.drawRoundedRect(volX, volY, volW, volH, volH / 2f, AMLL_VOLUME_BG);
-        if (volume > 0f) renderer.drawRoundedRect(volX, volY, Math.max(volH, volW * volume), volH, volH / 2f, AMLL_VOLUME_FILL);
+        float volVisualH = volH + (20f * s - volH) * volumeVisual;
+        float volVisualY = volY + (volH - volVisualH) * 0.5f;
+        float volVisualX = volX + volumeBounceX;
+        renderer.drawRoundedRect(volVisualX, volVisualY, volW, volVisualH, volVisualH / 2f, AMLL_VOLUME_BG);
+        if (volume > 0f) renderer.drawRoundedRect(volVisualX, volVisualY, Math.max(volVisualH, volW * volume), volVisualH, volVisualH / 2f, withAlpha(AMLL_VOLUME_FILL, 0.80f + 0.20f * volumeVisual));
         drawSpeakerWithWaves(x + w * 0.92f, volCy, 13.5f * s, AMLL_VOLUME);
     }
 
@@ -591,17 +652,29 @@ public class Musicpage extends Screen {
     }
 
     private void renderPlaylistButton(float x, float y, float size, float s, Typeface tf) {
+        float gap = 12f * s;
+        lyricToggleX = x - size - gap;
+        lyricToggleY = y;
+        lyricToggleW = size;
+        lyricToggleH = size;
         listX = x;
         listY = y;
         listW = size;
         listH = size;
-        renderer.drawRoundedRect(x, y, size, size, 8f * s, W18);
-        float lx = x + 9f * s;
-        float ly = y + 10f * s;
-        for (int i = 0; i < 3; i++) {
-            renderer.drawCircle(lx, ly + i * 7f * s, 1.4f * s, W88);
-            renderer.drawRoundedRect(lx + 5f * s, ly + i * 7f * s - 1f * s, 13f * s, 2f * s, 1f * s, W88);
-        }
+        drawLyricsToggleButton(lyricToggleX, lyricToggleY, size, s, lyricsVisible);
+        drawPlaylistToggleButton(listX, listY, size, s, playlistOpen);
+    }
+
+    private void drawLyricsToggleButton(float x, float y, float size, float s, boolean active) {
+        int color = active ? W88 : W46;
+        String[] paths = active ? new String[]{ICON_LYRICS_ON_AMLL_0, ICON_LYRICS_ON_AMLL_1} : new String[]{ICON_LYRICS_OFF_AMLL};
+        drawIconRect(paths, 64f, 64f, x + size * 0.5f, y + size * 0.5f, size, color);
+    }
+
+    private void drawPlaylistToggleButton(float x, float y, float size, float s, boolean active) {
+        int color = active ? W88 : W46;
+        String[] paths = active ? new String[]{ICON_PLAYLIST_ON_AMLL} : new String[]{ICON_PLAYLIST_OFF_AMLL};
+        drawIcon(paths, 64f, x + size * 0.5f, y + size * 0.5f, size, color);
     }
 
     private void renderLyrics(float x, float y, float w, float h, Typeface tf, int active, float scrollBase, float s) {
@@ -666,8 +739,9 @@ public class Musicpage extends Screen {
             float activeSize = fitLyricTextSize(text, tf, activePreferred, Math.max(16f, 20f * s), maxWidth);
             float inactiveSize = activeSize;
             TextImage active = createLyricTextImage(text, tf, activeSize, WHITE, 3.2f * s, false, maxWidth);
-            TextImage inactive = createLyricTextImage(text, tf, inactiveSize, WHITE, 6.0f * s, true, maxWidth);
-            lyricCache.add(new CachedLyricLine(active, inactive));
+            TextImage inactive = createLyricTextImage(text, tf, inactiveSize, WHITE, 5.6f * s, true, maxWidth);
+            TextImage hover = createLyricTextImage(text, tf, inactiveSize, WHITE, 0f, true, maxWidth);
+            lyricCache.add(new CachedLyricLine(active, inactive, hover));
         }
         return true;
     }
@@ -919,7 +993,7 @@ public class Musicpage extends Screen {
         return currentUiTrack != null && !lyricLines.isEmpty();
     }
 
-    private void updateLyricAnimation(int active, float s, float dt) {
+    private void updateLyricAnimation(int active, float currentSeconds, float s, float dt) {
         SkijaTestScreen.ensureFontLoaded();
         Typeface tf = SkijaTestScreen.curTf;
         if (tf != null && layoutRightW > 1f) {
@@ -928,7 +1002,9 @@ public class Musicpage extends Screen {
             if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) lyricSnapOnNextRender = true;
         }
         boolean snap = lyricSnapOnNextRender;
-        float targetScroll = lyricScrollTarget(active, s);
+        InterludeState interlude = computeInterlude(active, currentSeconds);
+        updateInterludeSlotAnimation(interlude.active(), dt, snap);
+        float targetScroll = lyricScrollTarget(active, s, interlude);
         if (snap) {
             lyricScroll = targetScroll;
             lyricScrollVelocity = 0f;
@@ -940,16 +1016,19 @@ public class Musicpage extends Screen {
             float safeOffset = Math.max(38f * s, Math.min(lyricsLayerH * 0.22f, 88f * s));
             if (Math.abs(lyricLayerBlitOffsetY) > safeOffset) lyricsLayerDirty = true;
         }
-        updateLyricLineAnimations(active, s, dt, snap);
+        updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude);
         lyricSnapOnNextRender = false;
     }
 
-    private float lyricScrollTarget(int active, float s) {
+    private float lyricScrollTarget(int active, float s, InterludeState interlude) {
         float gap = 14f * s;
         float target = 0f;
         int count = Math.min(Math.max(active, 0), lyricLines.size());
+        float slotHeight = interludeSlotHeight(s) * interludeSlotVisual;
+        boolean reserveSlot = interlude.active() || slotHeight > 0.05f;
         for (int i = 0; i < count; i++) {
             target += getLineContentHeight(i, active, s) + gap;
+            if (reserveSlot && i == interlude.anchor()) target += slotHeight;
         }
         return target;
     }
@@ -981,15 +1060,24 @@ public class Musicpage extends Screen {
         }
     }
 
-    private void updateLyricLineAnimations(int active, float s, float dt, boolean snap) {
+    private void updateLyricLineAnimations(int active, float currentSeconds, float s, float dt, boolean snap, InterludeState interlude) {
         if (lyricCache.size() != lyricLines.size()) return;
         float safeDt = clamp(dt, 0f, 0.05f);
         SpringParams params = lyricSpringParams(active);
         float gap = 14f * s;
+        float slotHeight = interludeSlotHeight(s) * interludeSlotVisual;
+        boolean reserveSlot = interlude.active() || slotHeight > 0.05f;
+        boolean showDots = interlude.active();
         float anchorY = layoutLyricTop + layoutLyricH * 0.35f;
         float baseY = anchorY - lyricScroll;
         float offsetY = 0f;
+        boolean dotsPlaced = false;
         for (int i = 0; i < lyricCache.size(); i++) {
+            if (reserveSlot && !dotsPlaced && i == interlude.anchor() + 1) {
+                updateInterludeAnimation(showDots ? baseY + offsetY : interludeY, showDots, s, safeDt, snap);
+                offsetY += slotHeight;
+                dotsPlaced = true;
+            }
             CachedLyricLine line = lyricCache.get(i);
             LyricPresentation presentation = computeLyricPresentation(i, active);
             float targetY = baseY + offsetY;
@@ -1032,12 +1120,117 @@ public class Musicpage extends Screen {
                 }
             }
             offsetY += getLineContentHeight(i, active, s) + gap;
+            if (reserveSlot && !dotsPlaced && i == interlude.anchor()) {
+                updateInterludeAnimation(showDots ? baseY + offsetY - gap * 0.5f : interludeY, showDots, s, safeDt, snap);
+                offsetY += slotHeight;
+                dotsPlaced = true;
+            }
+        }
+        if (showDots) {
+            interludeStartTime = interlude.start();
+            interludeEndTime = interlude.end();
+            interludeCurrentTime = currentSeconds;
+            if (!dotsPlaced) updateInterludeAnimation(baseY + offsetY, true, s, safeDt, snap);
+        } else if (!dotsPlaced || interludeOpacity > 0.001f) {
+            updateInterludeAnimation(interludeY, false, s, safeDt, snap);
+        }
+    }
+
+    private InterludeState computeInterlude(int active, float currentSeconds) {
+        if (lyricLines.isEmpty()) return new InterludeState(false, Integer.MIN_VALUE, 0f, 0f);
+        int anchor = active;
+        int next = active + 1;
+        if (active < 0) {
+            anchor = -1;
+            next = 0;
+        }
+        if (next < 0 || next >= lyricLines.size()) return new InterludeState(false, anchor, 0f, 0f);
+        float prevStart = anchor >= 0 ? lyricLines.get(anchor).time() : 0f;
+        float nextStart = lyricLines.get(next).time();
+        float gapEnd = Math.max(prevStart, nextStart - 0.25f);
+        float estimatedEnd = anchor >= 0 ? estimatedLyricEnd(anchor, nextStart) : 0f;
+        float lineEnd = Math.max(estimatedEnd, nextStart - 4.75f);
+        lineEnd = Math.min(lineEnd, gapEnd);
+        if (gapEnd - lineEnd < 3.8f) return new InterludeState(false, anchor, 0f, 0f);
+        boolean activeGap = currentSeconds >= lineEnd && currentSeconds < gapEnd;
+        return new InterludeState(activeGap, anchor, lineEnd, gapEnd);
+    }
+
+    private float estimatedLyricEnd(int index, float nextStart) {
+        if (index < 0 || index >= lyricLines.size()) return 0f;
+        String text = normalizeLyricText(lyricLines.get(index).text());
+        int chars = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if (!Character.isWhitespace(cp)) chars++;
+            i += Character.charCount(cp);
+        }
+        float start = lyricLines.get(index).time();
+        float estimated = 1.15f + chars * 0.205f;
+        estimated = clamp(estimated, 2.2f, 6.8f);
+        return Math.min(nextStart, start + estimated);
+    }
+
+    private float interludeSlotHeight(float s) {
+        return 36f * s;
+    }
+
+    private void updateInterludeSlotAnimation(boolean visible, float dt, boolean snap) {
+        float target = visible ? 1f : 0f;
+        if (snap) {
+            interludeSlotVisual = target;
+            interludeSlotVelocity = 0f;
+            return;
+        }
+        float safeDt = clamp(dt, 0f, 0.05f);
+        float stiffness = visible ? 115f : 95f;
+        float damping = (float) Math.sqrt(stiffness) * 2.35f;
+        float d = target - interludeSlotVisual;
+        interludeSlotVelocity += d * stiffness * safeDt;
+        interludeSlotVelocity *= (float) Math.exp(-damping * safeDt);
+        interludeSlotVisual += interludeSlotVelocity * safeDt;
+        interludeSlotVisual = clamp(interludeSlotVisual, 0f, 1f);
+        if (Math.abs(d) < 0.002f && Math.abs(interludeSlotVelocity) < 0.004f) {
+            interludeSlotVisual = target;
+            interludeSlotVelocity = 0f;
+        }
+    }
+
+    private void updateInterludeAnimation(float targetY, boolean visible, float s, float dt, boolean snap) {
+        float targetOpacity = visible ? 0.62f : 0f;
+        if (snap) {
+            interludeY = targetY;
+            interludeVelocityY = 0f;
+            interludeOpacity = targetOpacity;
+            interludeVelocityOpacity = 0f;
+            return;
+        }
+        float stiffness = visible ? 160f : 120f;
+        float damping = (float) Math.sqrt(stiffness) * 2.1f;
+        float dy = targetY - interludeY;
+        interludeVelocityY += dy * stiffness * dt;
+        interludeVelocityY *= (float) Math.exp(-damping * dt);
+        interludeY += interludeVelocityY * dt;
+        float opacityStiffness = visible ? 180f : 140f;
+        float opacityDamping = (float) Math.sqrt(opacityStiffness) * 2.0f;
+        float da = targetOpacity - interludeOpacity;
+        interludeVelocityOpacity += da * opacityStiffness * dt;
+        interludeVelocityOpacity *= (float) Math.exp(-opacityDamping * dt);
+        interludeOpacity += interludeVelocityOpacity * dt;
+        if (Math.abs(dy) < 0.20f && Math.abs(interludeVelocityY) < 0.30f) {
+            interludeY = targetY;
+            interludeVelocityY = 0f;
+        }
+        if (Math.abs(da) < 0.003f && Math.abs(interludeVelocityOpacity) < 0.005f) {
+            interludeOpacity = targetOpacity;
+            interludeVelocityOpacity = 0f;
         }
     }
 
     private LyricPresentation computeLyricPresentation(int index, int active) {
         int dist = Math.abs(index - active);
-        if (dist == 0) return new LyricPresentation(1f, 1f);
+        boolean playing = currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack);
+        if (dist == 0) return new LyricPresentation(1f, playing ? 1f : 1.012f);
         float opacity;
         if (dist == 1) opacity = 0.58f;
         else if (dist == 2) opacity = 0.42f;
@@ -1045,10 +1238,136 @@ public class Musicpage extends Screen {
         else opacity = 0.23f;
         if (index < active) opacity *= 0.78f;
         float scale = dist == 1 ? 0.975f : dist == 2 ? 0.955f : 0.94f;
-        return new LyricPresentation(clamp(opacity, 0.18f, 0.62f), scale);
+        if (!playing) {
+            opacity = Math.max(opacity, dist <= 2 ? 0.40f : 0.30f);
+            scale = 1f;
+        }
+        return new LyricPresentation(clamp(opacity, 0.18f, playing ? 0.62f : 0.48f), scale);
     }
 
+    private void startLyricViewAnimation(long now) {
+        lyricLayoutAnimStart = lyricLayoutVisual;
+        lyricOpacityAnimStart = lyricOpacityVisual;
+        lyricViewAnimStartedAt = now;
+    }
 
+    private boolean updateLyricViewAnimation(long now) {
+        float target = lyricsVisible ? 1f : 0f;
+        float oldLayout = lyricLayoutVisual;
+        float oldOpacity = lyricOpacityVisual;
+        float elapsed = Math.max(0f, now - lyricViewAnimStartedAt);
+        float layoutT = clamp(elapsed / LYRIC_LAYOUT_ANIM_MS, 0f, 1f);
+        lyricLayoutVisual = lyricLayoutAnimStart + (target - lyricLayoutAnimStart) * amllLayoutEase(layoutT);
+        if (layoutT >= 1f) lyricLayoutVisual = target;
+        if (lyricsVisible) {
+            if (elapsed < LYRIC_SHOW_DELAY_MS) {
+                lyricOpacityVisual = lyricOpacityAnimStart;
+            } else {
+                float opacityT = clamp((elapsed - LYRIC_SHOW_DELAY_MS) / LYRIC_SHOW_ANIM_MS, 0f, 1f);
+                lyricOpacityVisual = lyricOpacityAnimStart + (target - lyricOpacityAnimStart) * amllLayoutEase(opacityT);
+                if (opacityT >= 1f) lyricOpacityVisual = target;
+            }
+        } else {
+            float opacityT = clamp(elapsed / LYRIC_HIDE_ANIM_MS, 0f, 1f);
+            lyricOpacityVisual = lyricOpacityAnimStart + (target - lyricOpacityAnimStart) * amllLayoutEase(opacityT);
+            if (opacityT >= 1f) lyricOpacityVisual = target;
+        }
+        lyricLayoutVisual = clamp(lyricLayoutVisual, 0f, 1f);
+        lyricOpacityVisual = clamp(lyricOpacityVisual, 0f, 1f);
+        return Math.abs(oldLayout - lyricLayoutVisual) > 0.001f || Math.abs(oldOpacity - lyricOpacityVisual) > 0.001f || Math.abs(lyricLayoutVisual - target) > 0.001f || Math.abs(lyricOpacityVisual - target) > 0.001f;
+    }
+
+    private float amllLayoutEase(float t) {
+        return cubicBezier(clamp(t, 0f, 1f), 0.5f, 0f, 0.5f, 1f);
+    }
+
+    private float cubicBezier(float t, float x1, float y1, float x2, float y2) {
+        float lo = 0f;
+        float hi = 1f;
+        float p = t;
+        for (int i = 0; i < 10; i++) {
+            p = (lo + hi) * 0.5f;
+            if (cubicBezierValue(p, x1, x2) < t) lo = p;
+            else hi = p;
+        }
+        return cubicBezierValue(p, y1, y2);
+    }
+
+    private float cubicBezierValue(float t, float a, float b) {
+        float u = 1f - t;
+        return 3f * u * u * t * a + 3f * u * t * t * b + t * t * t;
+    }
+
+    private float leftVisualOffset() {
+        float s = pageScale();
+        float leftW = Math.min(height * 0.50f, width * 0.38f);
+        leftW = Math.max(220f * s, leftW);
+        float baseLeftX = Math.max(22f * s, (width * 0.45f - leftW) * 0.5f);
+        float hiddenLeftX = Math.max(22f * s, (width - leftW) * 0.5f);
+        return (hiddenLeftX - baseLeftX) * (1f - clamp(lyricLayoutVisual, 0f, 1f));
+    }
+
+    private float leftMovingRegionWidth() {
+        float s = pageScale();
+        float leftW = Math.min(height * 0.50f, width * 0.38f);
+        leftW = Math.max(220f * s, leftW);
+        float baseLeftX = Math.max(22f * s, (width * 0.45f - leftW) * 0.5f);
+        return clamp(Math.max(width * 0.46f, baseLeftX + leftW + 42f * s), 1f, width);
+    }
+
+    private boolean updateControlAnimations(float dt, float s) {
+        float safeDt = clamp(dt, 0f, 0.05f);
+        float hoverStep = 1f - (float) Math.exp(-safeDt * 13.5f);
+        float pressStep = safeDt / 0.70f;
+        boolean animating = false;
+        for (int i = 0; i < controlHover.length; i++) {
+            float target = hoveredControl == i ? 1f : 0f;
+            float oldHover = controlHover[i];
+            float oldPress = controlPress[i];
+            controlHover[i] += (target - controlHover[i]) * hoverStep;
+            if (controlPress[i] > 0f) {
+                controlPress[i] += pressStep;
+                if (controlPress[i] >= 1f) controlPress[i] = 0f;
+            }
+            if (Math.abs(controlHover[i] - target) < 0.002f) controlHover[i] = target;
+            if (Math.abs(oldHover - controlHover[i]) > 0.001f || Math.abs(oldPress - controlPress[i]) > 0.001f) animating = true;
+        }
+        float sliderStep = 1f - (float) Math.exp(-safeDt * 10.5f);
+        float oldProgressVisual = progressVisual;
+        float oldVolumeVisual = volumeVisual;
+        float oldProgressBounce = progressBounceX;
+        float oldVolumeBounce = volumeBounceX;
+        progressVisual += (((hoveredProgress || draggingProgress) ? 1f : 0f) - progressVisual) * sliderStep;
+        volumeVisual += (((hoveredVolume || draggingVolume) ? 1f : 0f) - volumeVisual) * sliderStep;
+        if (Math.abs(progressVisual) < 0.002f && !hoveredProgress && !draggingProgress) progressVisual = 0f;
+        if (Math.abs(volumeVisual) < 0.002f && !hoveredVolume && !draggingVolume) volumeVisual = 0f;
+        if (!draggingProgress) progressBounceX += (0f - progressBounceX) * sliderStep;
+        if (!draggingVolume) volumeBounceX += (0f - volumeBounceX) * sliderStep;
+        if (Math.abs(progressBounceX) < 0.02f) progressBounceX = 0f;
+        if (Math.abs(volumeBounceX) < 0.02f) volumeBounceX = 0f;
+        if (Math.abs(oldProgressVisual - progressVisual) > 0.001f || Math.abs(oldVolumeVisual - volumeVisual) > 0.001f || Math.abs(oldProgressBounce - progressBounceX) > 0.01f || Math.abs(oldVolumeBounce - volumeBounceX) > 0.01f) animating = true;
+        return animating;
+    }
+
+    private float controlScale(int index) {
+        float t = clamp(controlPress[index], 0f, 1f);
+        float press = 1f;
+        if (t > 0f && t < 0.20f) press = 1f - 0.15f * (t / 0.20f);
+        else if (t >= 0.20f && t < 0.50f) press = 0.85f + 0.25f * ((t - 0.20f) / 0.30f);
+        else if (t >= 0.50f && t < 1f) press = 1.10f - 0.10f * ((t - 0.50f) / 0.50f);
+        return press;
+    }
+
+    private float controlHoverRadius(int index) {
+        return controlHover[index];
+    }
+
+    private void startControlPress(int index) {
+        if (index >= 0 && index < controlPress.length) {
+            controlPress[index] = 0.0001f;
+            controlsLayerDirty = true;
+        }
+    }
 
     private void drawPlayPause(float cx, float cy, float size, boolean showPlay, boolean hover, float hoverR) {
         drawButtonHover(cx, cy, hoverR, hover);
@@ -1079,7 +1398,8 @@ public class Musicpage extends Screen {
     }
 
     private void drawButtonHover(float cx, float cy, float radius, boolean hover) {
-        if (hover) renderer.drawCircle(cx, cy, radius, AMLL_BUTTON_HOVER);
+        float a = clamp(radius / Math.max(1f, btnR), 0f, 1f);
+        if (hover && a > 0.01f) renderer.drawCircle(cx, cy, btnR, withAlpha(AMLL_BUTTON_HOVER, alphaOf(AMLL_BUTTON_HOVER) * a));
     }
 
     private void drawSpeaker(float cx, float cy, float r, int color) {
@@ -1118,7 +1438,10 @@ public class Musicpage extends Screen {
         Path cached = iconPathCache.get(data);
         if (cached != null) return cached;
         Path path = Path.makeFromSVGString(data);
-        if (path != null) iconPathCache.put(data, path);
+        if (path != null) {
+            path.setFillMode(io.github.humbleui.skija.PathFillMode.EVEN_ODD);
+            iconPathCache.put(data, path);
+        }
         return path;
     }
 
@@ -1137,8 +1460,11 @@ public class Musicpage extends Screen {
             draggingVolume = false;
             if (wasDraggingVolume) controlsLayerDirty = true;
         }
+        float controlsOffset = leftVisualOffset();
         if (draggingProgress && currentUiTrack != null && progW > 0) {
-            float p = clamp((mx - progX) / progW, 0f, 1f);
+            float rel = (mx - (progX + controlsOffset)) / progW;
+            float p = clamp(rel, 0f, 1f);
+            progressBounceX = rel < 0f ? (float) Math.tanh(rel * 2f) * 12f * pageScale() : rel > 1f ? (float) Math.tanh((rel - 1f) * 2f) * 12f * pageScale() : 0f;
             progressDragSeconds = currentUiTrack.duration() * p;
             if (now - lastDragRender >= DRAG_RENDER_INTERVAL_MS) {
                 controlsLayerDirty = true;
@@ -1147,7 +1473,9 @@ public class Musicpage extends Screen {
             }
         }
         if (draggingVolume && volW > 0) {
-            volume = clamp((mx - volX) / volW, 0f, 1f);
+            float rel = (mx - (volX + controlsOffset)) / volW;
+            volumeBounceX = rel < 0f ? (float) Math.tanh(rel * 2f) * 12f * pageScale() : rel > 1f ? (float) Math.tanh((rel - 1f) * 2f) * 12f * pageScale() : 0f;
+            volume = clamp(rel, 0f, 1f);
             MusicLoader.setVolume(volume);
             if (now - lastDragRender >= DRAG_RENDER_INTERVAL_MS) {
                 controlsLayerDirty = true;
@@ -1155,20 +1483,40 @@ public class Musicpage extends Screen {
             }
         }
         updateControlHover(mx, my);
+        updateSliderHover(mx, my);
+        updateLyricsHover(mx, my);
         wasLeftDown = leftDown;
     }
 
     private void updateControlHover(float mx, float my) {
         int hover = -1;
-        if (inside(mx, my, modeX - btnR, modeY - btnR, btnR * 2f, btnR * 2f)) hover = 0;
-        else if (inside(mx, my, prevX - btnR, prevY - btnR, btnR * 2f, btnR * 2f)) hover = 1;
-        else if (inside(mx, my, playX - btnR, playY - btnR, btnR * 2f, btnR * 2f)) hover = 2;
-        else if (inside(mx, my, nextX - btnR, nextY - btnR, btnR * 2f, btnR * 2f)) hover = 3;
-        else if (inside(mx, my, repeatX - btnR, repeatY - btnR, btnR * 2f, btnR * 2f)) hover = 4;
+        float ox = leftVisualOffset();
+        if (inside(mx, my, modeX + ox - btnR, modeY - btnR, btnR * 2f, btnR * 2f)) hover = 0;
+        else if (inside(mx, my, prevX + ox - btnR, prevY - btnR, btnR * 2f, btnR * 2f)) hover = 1;
+        else if (inside(mx, my, playX + ox - btnR, playY - btnR, btnR * 2f, btnR * 2f)) hover = 2;
+        else if (inside(mx, my, nextX + ox - btnR, nextY - btnR, btnR * 2f, btnR * 2f)) hover = 3;
+        else if (inside(mx, my, repeatX + ox - btnR, repeatY - btnR, btnR * 2f, btnR * 2f)) hover = 4;
         if (hoveredControl != hover) {
             hoveredControl = hover;
             controlsLayerDirty = true;
         }
+    }
+
+    private void updateSliderHover(float mx, float my) {
+        float ox = leftVisualOffset();
+        boolean progress = inside(mx, my, progX + ox, progY - 8f, progW, progH + 12f);
+        boolean volumeHover = inside(mx, my, volX + ox - 10f, volY - 12f, volW + 20f, volH + 24f);
+        if (hoveredProgress != progress || hoveredVolume != volumeHover) {
+            hoveredProgress = progress;
+            hoveredVolume = volumeHover;
+            controlsLayerDirty = true;
+        }
+    }
+
+    private void updateLyricsHover(float mx, float my) {
+        float s = pageScale();
+        boolean hover = lyricsVisible && inside(mx, my, layoutRightX - 24f * s, layoutLyricTop, layoutRightW + 48f * s, layoutLyricH);
+        if (hoveredLyrics != hover) hoveredLyrics = hover;
     }
 
     @Override
@@ -1192,6 +1540,16 @@ public class Musicpage extends Screen {
     }
 
     private boolean handleControlClick(float mx, float my) {
+        if (inside(mx, my, lyricToggleX, lyricToggleY, lyricToggleW, lyricToggleH)) {
+            lyricsVisible = !lyricsVisible;
+            startLyricViewAnimation(System.currentTimeMillis());
+            hoveredLyrics = false;
+            playlistOpen = false;
+            dirty = true;
+            controlsLayerDirty = true;
+            lyricsLayerDirty = true;
+            return true;
+        }
         if (playlistOpen) {
             if (playlistContains(mx, my)) {
                 int row = playlistRowAt(mx, my);
@@ -1209,7 +1567,16 @@ public class Musicpage extends Screen {
                 return true;
             }
         }
-        if (inside(mx, my, playX - btnR, playY - btnR, btnR * 2f, btnR * 2f)) {
+        int clickedLyric = lyricLineAt(mx, my);
+        if (clickedLyric >= 0 && clickedLyric < lyricLines.size()) {
+            playDisplayedTrackFrom(lyricLines.get(clickedLyric).time());
+            lyricSnapOnNextRender = true;
+            controlsLayerDirty = true;
+            return true;
+        }
+        float ox = leftVisualOffset();
+        if (inside(mx, my, playX + ox - btnR, playY - btnR, btnR * 2f, btnR * 2f)) {
+            startControlPress(2);
             if (currentUiTrack != null) {
                 MusicLoader.toggle(currentUiTrack);
                 if (MusicLoader.isPlaying(currentUiTrack)) resetPlaybackUiState();
@@ -1217,20 +1584,24 @@ public class Musicpage extends Screen {
             controlsLayerDirty = true;
             return true;
         }
-        if (inside(mx, my, prevX - btnR, prevY - btnR, btnR * 2f, btnR * 2f)) {
+        if (inside(mx, my, prevX + ox - btnR, prevY - btnR, btnR * 2f, btnR * 2f)) {
+            startControlPress(1);
             previousTrack();
             return true;
         }
-        if (inside(mx, my, nextX - btnR, nextY - btnR, btnR * 2f, btnR * 2f)) {
+        if (inside(mx, my, nextX + ox - btnR, nextY - btnR, btnR * 2f, btnR * 2f)) {
+            startControlPress(3);
             nextTrack();
             return true;
         }
-        if (inside(mx, my, modeX - btnR, modeY - btnR, btnR * 2f, btnR * 2f)) {
+        if (inside(mx, my, modeX + ox - btnR, modeY - btnR, btnR * 2f, btnR * 2f)) {
+            startControlPress(0);
             shuffleMode = !shuffleMode;
             controlsLayerDirty = true;
             return true;
         }
-        if (inside(mx, my, repeatX - btnR, repeatY - btnR, btnR * 2f, btnR * 2f)) {
+        if (inside(mx, my, repeatX + ox - btnR, repeatY - btnR, btnR * 2f, btnR * 2f)) {
+            startControlPress(4);
             repeatMode = !repeatMode;
             controlsLayerDirty = true;
             return true;
@@ -1240,9 +1611,9 @@ public class Musicpage extends Screen {
             dirty = true;
             return true;
         }
-        if (inside(mx, my, progX, progY - 8, progW, progH + 12)) {
+        if (inside(mx, my, progX + ox, progY - 8, progW, progH + 12)) {
             draggingProgress = true;
-            progressDragSeconds = currentUiTrack != null ? currentUiTrack.duration() * clamp((mx - progX) / progW, 0f, 1f) : -1f;
+            progressDragSeconds = currentUiTrack != null ? currentUiTrack.duration() * clamp((mx - (progX + ox)) / progW, 0f, 1f) : -1f;
             if (currentUiTrack != null && progressDragSeconds >= 0f) playDisplayedTrackFrom(progressDragSeconds);
             resetPlaybackUiState();
             controlsLayerDirty = true;
@@ -1250,15 +1621,29 @@ public class Musicpage extends Screen {
             lastDragRender = System.currentTimeMillis();
             return true;
         }
-        if (inside(mx, my, volX - 10, volY - 12, volW + 20, volH + 24)) {
+        if (inside(mx, my, volX + ox - 10, volY - 12, volW + 20, volH + 24)) {
             draggingVolume = true;
-            volume = clamp((mx - volX) / volW, 0f, 1f);
+            volume = clamp((mx - (volX + ox)) / volW, 0f, 1f);
             MusicLoader.setVolume(volume);
             controlsLayerDirty = true;
             lastDragRender = System.currentTimeMillis();
             return true;
         }
         return false;
+    }
+
+    private int lyricLineAt(float mx, float my) {
+        if (!lyricsVisible || !useLineLyricTextures() || lyricCache.size() != lyricLines.size()) return -1;
+        float s = pageScale();
+        if (!inside(mx, my, layoutRightX - 24f * s, layoutLyricTop, layoutRightW + 48f * s, layoutLyricH)) return -1;
+        for (int i = 0; i < lyricCache.size(); i++) {
+            CachedLyricLine line = lyricCache.get(i);
+            if (!line.initialized) continue;
+            float h = getLineContentHeight(i, lastActiveLyric, s);
+            float y = line.currentY - 7f * s;
+            if (my >= y && my <= y + h + 14f * s) return i;
+        }
+        return -1;
     }
 
     private boolean playlistContains(float mx, float my) {
@@ -1281,7 +1666,7 @@ public class Musicpage extends Screen {
     private void nextTrack() {
         int count = MusicLoader.getTracks().size();
         if (count <= 0) return;
-        trackIndex = shuffleMode && count > 1 ? (trackIndex + 1 + Math.max(1, (int)(System.nanoTime() % (count - 1)))) % count : (trackIndex + 1) % count;
+        trackIndex = nextTrackIndex(count);
         refreshTrackCache();
         playSelectedTrackFromStart();
         dirty = true;
@@ -1290,10 +1675,37 @@ public class Musicpage extends Screen {
     private void previousTrack() {
         int count = MusicLoader.getTracks().size();
         if (count <= 0) return;
-        trackIndex = (trackIndex - 1 + count) % count;
+        trackIndex = shuffleMode ? randomDifferentTrackIndex(count) : (trackIndex - 1 + count) % count;
         refreshTrackCache();
         playSelectedTrackFromStart();
         dirty = true;
+    }
+
+    private void handlePlaybackEnded() {
+        int count = MusicLoader.getTracks().size();
+        if (count <= 0) return;
+        if (repeatMode) {
+            playSelectedTrackFromStart();
+        } else if (count > 1) {
+            trackIndex = nextTrackIndex(count);
+            refreshTrackCache();
+            playSelectedTrackFromStart();
+            dirty = true;
+        } else {
+            controlsLayerDirty = true;
+            lyricsLayerDirty = true;
+        }
+    }
+
+    private int nextTrackIndex(int count) {
+        if (count <= 1) return trackIndex;
+        return shuffleMode ? randomDifferentTrackIndex(count) : (trackIndex + 1) % count;
+    }
+
+    private int randomDifferentTrackIndex(int count) {
+        if (count <= 1) return trackIndex;
+        int offset = 1 + Math.floorMod((int) (System.nanoTime() ^ (System.currentTimeMillis() * 31L)), count - 1);
+        return (trackIndex + offset) % count;
     }
 
     private void playSelectedTrackFromStart() {
@@ -1477,15 +1889,28 @@ public class Musicpage extends Screen {
         pose.scale(scale, scale);
         pose.translate(-width * 0.5f, -height * 0.5f);
         blitBackgroundRenderer(g);
-        blitRenderer(g, staticRenderer, 0f, 0f);
-        blitRenderer(g, controlsRenderer, controlsLayerX, controlsLayerY);
-        if (!blitLyricLines(g)) blitLyricsRenderer(g);
+        blitStaticLayer(g);
+        blitRenderer(g, controlsRenderer, controlsLayerX + leftVisualOffset(), controlsLayerY);
+        float lyricAlpha = clamp(lyricOpacityVisual, 0f, 1f);
+        if (currentUiTrack != null && lyricAlpha > 0.01f && !blitLyricLines(g, lyricAlpha)) blitLyricsRenderer(g, lyricAlpha);
         pose.popMatrix();
         float entryA = 220f * (1f - easeInOut(entryT));
         float returnA = 225f * returnE;
         float closeA = 205f * closeE;
         int a = Math.max(0, Math.min(240, Math.round(Math.max(entryA, Math.max(returnA, closeA)))));
         if (a > 0) g.fill(0, 0, width, height, a << 24);
+    }
+
+    private void blitStaticLayer(GuiGraphicsExtractor g) {
+        if (staticRenderer == null) return;
+        float offset = leftVisualOffset();
+        if (Math.abs(offset) <= 0.01f) {
+            blitRenderer(g, staticRenderer, 0f, 0f);
+            return;
+        }
+        float movingW = leftMovingRegionWidth();
+        blitRendererRegion(g, staticRenderer, offset, 0f, movingW, height, 0f, 0f, movingW, height);
+        if (movingW < width - 0.5f) blitRendererRegion(g, staticRenderer, movingW, 0f, width - movingW, height, movingW, 0f, width - movingW, height);
     }
 
     private float entryProgress(long now) {
@@ -1511,6 +1936,20 @@ public class Musicpage extends Screen {
         return t < 0.5f ? 2f * t * t : 1f - (float) Math.pow(-2f * t + 2f, 2f) * 0.5f;
     }
 
+    private float easeOutExpo(float t) {
+        t = clamp(t, 0f, 1f);
+        return t >= 1f ? 1f : 1f - (float) Math.pow(2f, -10f * t);
+    }
+
+    private float easeInOutBack(float t) {
+        t = clamp(t, 0f, 1f);
+        float c1 = 1.70158f;
+        float c2 = c1 * 1.525f;
+        return t < 0.5f
+                ? (((2f * t) * (2f * t)) * ((c2 + 1f) * 2f * t - c2)) / 2f
+                : (((2f * t - 2f) * (2f * t - 2f)) * ((c2 + 1f) * (t * 2f - 2f) + c2) + 2f) / 2f;
+    }
+
     private void blitBackgroundRenderer(GuiGraphicsExtractor g) {
         if (gpuBackground != null && gpuBackground.draw(g, width, height, backgroundRenderTime, backgroundLowFreqPulse)) {
             g.fill(0, 0, width, height, 0x26000000);
@@ -1528,7 +1967,7 @@ public class Musicpage extends Screen {
         pose.popMatrix();
     }
 
-    private boolean blitLyricLines(GuiGraphicsExtractor g) {
+    private boolean blitLyricLines(GuiGraphicsExtractor g, float globalAlpha) {
         if (!useLineLyricTextures()) return false;
         SkijaTestScreen.ensureFontLoaded();
         Typeface tf = SkijaTestScreen.curTf;
@@ -1537,7 +1976,10 @@ public class Musicpage extends Screen {
         float inactivePreferred = Math.max(17f, 24f * s);
         int active = lastActiveLyric >= 0 ? lastActiveLyric : activeLyricIndex(elapsedSeconds(currentUiTrack, System.currentTimeMillis()));
         if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
-            updateLyricLineAnimations(active, s, 0f, true);
+            float currentSeconds = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
+            InterludeState interlude = computeInterlude(active, currentSeconds);
+            updateInterludeSlotAnimation(interlude.active(), 0f, true);
+            updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude);
         }
         if (lyricCache.size() != lyricLines.size() || lyricCache.isEmpty()) return false;
         float clipX = layoutRightX - 24f * s;
@@ -1547,14 +1989,15 @@ public class Musicpage extends Screen {
         for (int i = 0; i < lyricCache.size(); i++) {
             CachedLyricLine line = lyricCache.get(i);
             boolean isActive = i == active;
-            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : line.inactiveRenderer;
+            boolean sharpen = hoveredLyrics && !isActive;
+            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : sharpen ? line.hoverRenderer : line.inactiveRenderer;
             if (lineRenderer == null || !line.initialized) continue;
-            float alpha = clamp(line.currentOpacity, 0f, 1f);
+            float alpha = clamp(line.currentOpacity * globalAlpha, 0f, 1f);
             if (alpha <= 0.01f) continue;
             float scale = clamp(line.currentScale, 0.86f, 1.08f);
-            float texW = isActive ? line.activeW : line.inactiveW;
-            float texH = isActive ? line.activeH : line.inactiveH;
-            float pad = isActive ? line.activePad : line.inactivePad;
+            float texW = isActive ? line.activeW : sharpen ? line.hoverW : line.inactiveW;
+            float texH = isActive ? line.activeH : sharpen ? line.hoverH : line.inactiveH;
+            float pad = isActive ? line.activePad : sharpen ? line.hoverPad : line.inactivePad;
             float contentH = Math.max(1f, texH - pad * 2f);
             float rawX = layoutRightX - pad;
             float rawY = line.currentY - pad;
@@ -1566,6 +2009,60 @@ public class Musicpage extends Screen {
             float drawH = texH * scale;
             blitRendererClippedAlpha(g, lineRenderer, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH);
         }
+        blitInterludeDots(g, s, clipX, clipY, clipW, clipH, globalAlpha);
+        return true;
+    }
+
+    private void blitInterludeDots(GuiGraphicsExtractor g, float s, float clipX, float clipY, float clipW, float clipH, float globalAlpha) {
+        if (interludeOpacity <= 0.01f) return;
+        if (!ensureInterludeDotRenderer(s)) return;
+        float duration = Math.max(0.001f, interludeEndTime - interludeStartTime);
+        float current = clamp(interludeCurrentTime - interludeStartTime, 0f, duration);
+        float breatheDuration = duration / Math.max(1f, (float) Math.ceil(duration / 1.5f));
+        float groupScale = ((float) Math.sin(1.5f * Math.PI - (current / breatheDuration) * 2f)) / 20f + 1f;
+        float globalOpacity = 1f;
+        if (current < 2f) groupScale *= easeOutExpo(current / 2f);
+        if (current < 0.5f) globalOpacity = 0f;
+        else if (current < 1f) globalOpacity *= (current - 0.5f) / 0.5f;
+        float remaining = duration - current;
+        if (remaining < 0.75f) groupScale *= 1f - easeInOutBack((0.75f - remaining) / 0.75f / 2f);
+        if (remaining < 0.375f) globalOpacity *= clamp(remaining / 0.375f, 0f, 1f);
+        float dotsDuration = Math.max(0.001f, duration - 0.75f);
+        groupScale = Math.max(0f, groupScale) * 0.70f;
+        float dot = 14.0f * s;
+        float gap = 8.0f * s;
+        float baseX = layoutRightX + 18f * s;
+        float baseY = interludeY + interludeSlotHeight(s) * 0.5f;
+        for (int i = 0; i < 3; i++) {
+            float dotOpacity = i == 0
+                    ? clamp(0.25f, ((current * 3f) / dotsDuration) * 0.75f, 1f)
+                    : i == 1
+                    ? clamp(0.25f, (((current - dotsDuration / 3f) * 3f) / dotsDuration) * 0.75f, 1f)
+                    : clamp(0.25f, (((current - (dotsDuration / 3f) * 2f) * 3f) / dotsDuration) * 0.75f, 1f);
+            float size = dot * groupScale;
+            float x = baseX + (i * (dot + gap)) * groupScale;
+            float y = baseY - size * 0.5f;
+            blitRendererClippedAlpha(g, interludeDotRenderer, x, y, size, size, interludeOpacity * globalOpacity * dotOpacity * globalAlpha, clipX, clipY, clipW, clipH);
+        }
+    }
+
+    private boolean ensureInterludeDotRenderer(float s) {
+        if (interludeDotRenderer != null && Math.abs(interludeDotScale - s) < 0.001f) return true;
+        if (interludeDotRenderer != null) interludeDotRenderer.close();
+        interludeDotScale = s;
+        int size = Math.max(2, Math.round(18f * s * guiScale));
+        interludeDotRenderer = new SkijaRenderer("music_page_interlude_dot", size, size);
+        interludeDotRenderer.clear(0x00000000);
+        Canvas c = interludeDotRenderer.canvas();
+        c.save();
+        c.scale(guiScale, guiScale);
+        try (Paint paint = new Paint()) {
+            paint.setAntiAlias(true);
+            paint.setColor(WHITE);
+            c.drawCircle(size / (2f * guiScale), size / (2f * guiScale), size / (2.05f * guiScale), paint);
+        }
+        c.restore();
+        interludeDotRenderer.upload();
         return true;
     }
 
@@ -1599,7 +2096,7 @@ public class Musicpage extends Screen {
         g.guiRenderState.addGuiElement(new TexturedQuadRenderState(RenderPipelines.GUI_TEXTURED, textureSetup, pose, x, y, w, h, u0, v0, u1, v1, (a << 24) | 0x00FFFFFF, scissor, bounds));
     }
 
-    private void blitLyricsRenderer(GuiGraphicsExtractor g) {
+    private void blitLyricsRenderer(GuiGraphicsExtractor g, float alpha) {
         if (lyricsRenderer == null) return;
         float dstX = lyricsLayerX;
         float dstY = layoutLyricTop;
@@ -1616,7 +2113,21 @@ public class Musicpage extends Screen {
         }
         if (srcY + dstH > logicalH) dstH = logicalH - srcY;
         if (dstH <= 0.5f || dstW <= 0.5f) return;
-        blitRendererRegion(g, lyricsRenderer, dstX, dstY, dstW, dstH, srcX, srcY, dstW, dstH);
+        if (alpha >= 0.999f) blitRendererRegion(g, lyricsRenderer, dstX, dstY, dstW, dstH, srcX, srcY, dstW, dstH);
+        else blitRendererRegionAlpha(g, lyricsRenderer, dstX, dstY, dstW, dstH, srcX, srcY, dstW, dstH, alpha);
+    }
+
+    private void blitRendererRegionAlpha(GuiGraphicsExtractor g, SkijaRenderer r, float dstX, float dstY, float dstW, float dstH, float srcX, float srcY, float srcW, float srcH, float alpha) {
+        if (r == null) return;
+        int srcPxX = Math.max(0, Math.round(srcX * guiScale));
+        int srcPxY = Math.max(0, Math.round(srcY * guiScale));
+        int srcPxW = Math.max(1, Math.min(r.getWidth() - srcPxX, Math.round(srcW * guiScale)));
+        int srcPxH = Math.max(1, Math.min(r.getHeight() - srcPxY, Math.round(srcH * guiScale)));
+        float u0 = srcPxX / (float) r.getWidth();
+        float v0 = srcPxY / (float) r.getHeight();
+        float u1 = (srcPxX + srcPxW) / (float) r.getWidth();
+        float v1 = (srcPxY + srcPxH) / (float) r.getHeight();
+        blitRendererAlpha(g, r, dstX, dstY, dstW, dstH, u0, v0, u1, v1, alpha);
     }
 
     private void blitRenderer(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y) {
@@ -1741,6 +2252,11 @@ public class Musicpage extends Screen {
             lyricsRenderer.close();
             lyricsRenderer = null;
         }
+        if (interludeDotRenderer != null) {
+            interludeDotRenderer.close();
+            interludeDotRenderer = null;
+        }
+        interludeDotScale = -1f;
         renderer = null;
         if (coverImage != null) {
             coverImage.close();
@@ -1775,7 +2291,7 @@ public class Musicpage extends Screen {
     }
 
     private float pageScale() {
-        return clamp(Math.min(width / 620f, height / 300f), 0.62f, 1.35f);
+        return clamp(Math.max(width / 1422f, height / 800f), 0.72f, 1.80f);
     }
 
     private float fitTextSize(String text, Typeface tf, float preferredSize, float minSize, float maxWidth) {
@@ -1866,6 +2382,8 @@ public class Musicpage extends Screen {
 
     private record LyricPresentation(float opacity, float scale) {}
 
+    private record InterludeState(boolean active, int anchor, float start, float end) {}
+
     private record TexturedQuadRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
                                            float x, float y, float w, float h,
                                            float u0, float v0, float u1, float v1,
@@ -1907,6 +2425,11 @@ public class Musicpage extends Screen {
         final float inactiveW;
         final float inactiveH;
         final float inactivePad;
+        final Image hoverImage;
+        final SkijaRenderer hoverRenderer;
+        final float hoverW;
+        final float hoverH;
+        final float hoverPad;
         float currentY;
         float velocityY;
         float currentScale = 1f;
@@ -1915,7 +2438,7 @@ public class Musicpage extends Screen {
         float velocityOpacity;
         boolean initialized;
 
-        CachedLyricLine(TextImage active, TextImage inactive) {
+        CachedLyricLine(TextImage active, TextImage inactive, TextImage hover) {
             this.activeImage = active.image;
             this.activeRenderer = active.renderer;
             this.activeW = active.w;
@@ -1926,14 +2449,21 @@ public class Musicpage extends Screen {
             this.inactiveW = inactive.w;
             this.inactiveH = inactive.h;
             this.inactivePad = inactive.pad;
+            this.hoverImage = hover.image;
+            this.hoverRenderer = hover.renderer;
+            this.hoverW = hover.w;
+            this.hoverH = hover.h;
+            this.hoverPad = hover.pad;
         }
 
         @Override
         public void close() {
             if (activeImage != null) activeImage.close();
             if (inactiveImage != null) inactiveImage.close();
+            if (hoverImage != null) hoverImage.close();
             if (activeRenderer != null) activeRenderer.close();
             if (inactiveRenderer != null) inactiveRenderer.close();
+            if (hoverRenderer != null) hoverRenderer.close();
         }
     }
 }
