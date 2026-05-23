@@ -10,5 +10,5 @@ Love from Eatgrapes for Vulkan support in Skija
 - 至于怎么用？你都来看车轮子了你还问我？
 
 ## 致谢
-- 感谢[AMLL Player](https://github.com/amll-dev/applemusic-like-lyrics)提供的灵感与思路
+- 感谢[AMLL Player](https://github.com/amll-dev/amll-player)提供的灵感与思路
 - MusicPage部分我将其单独称之为AMLL For Minecraft
