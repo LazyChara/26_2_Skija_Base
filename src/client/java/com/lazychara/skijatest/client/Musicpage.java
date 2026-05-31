@@ -4,6 +4,8 @@ import io.github.humbleui.skija.Canvas;
 import io.github.humbleui.skija.FilterBlurMode;
 import io.github.humbleui.skija.Font;
 import io.github.humbleui.skija.Image;
+import io.github.humbleui.skija.ImageFilter;
+import io.github.humbleui.skija.FilterTileMode;
 import io.github.humbleui.skija.MaskFilter;
 import io.github.humbleui.skija.Paint;
 import io.github.humbleui.skija.Path;
@@ -113,6 +115,10 @@ public class Musicpage extends Screen {
     private long lastBgRender;
     private long lastDragRender;
     private int lastActiveLyric = -1;
+    private final Set<Integer> amllHotGroups = new HashSet<>();
+    private final Set<Integer> amllBufferedGroups = new HashSet<>();
+    private int amllScrollToIndex = 0;
+    private float amllLastTimelineSeconds = -1f;
     private int lastRenderedSecond = -1;
     private boolean dirty = true;
     private boolean controlsLayerDirty = true;
@@ -171,9 +177,8 @@ public class Musicpage extends Screen {
     private float interludeOpacity;
     private float interludeStartTime;
     private float interludeEndTime;
+    private boolean interludeNextDuet;
     private float interludeCurrentTime;
-    private float interludeSlotVisual;
-    private float interludeSlotVelocity;
     private int interludeAnchor = Integer.MIN_VALUE;
 
     private float volX, volY, volW, volH;
@@ -240,11 +245,14 @@ public class Musicpage extends Screen {
         backgroundLowFreqPulse = 0f;
         backgroundPulseVisual = 0f;
         lastActiveLyric = -1;
+        amllHotGroups.clear();
+        amllBufferedGroups.clear();
+        amllScrollToIndex = 0;
+        amllLastTimelineSeconds = -1f;
         lastRenderedSecond = -1;
-        interludeSlotVisual = 0f;
-        interludeSlotVelocity = 0f;
         interludeAnchor = Integer.MIN_VALUE;
         interludeOpacity = 0f;
+        interludeNextDuet = false;
         interludeVelocityY = 0f;
         dirty = true;
         controlsLayerDirty = true;
@@ -372,6 +380,7 @@ public class Musicpage extends Screen {
             if (track != cachedTrack) {
                 cachedTrack = track;
                 lyricLines = parseLyrics(track.lyrics(), track.title(), track.artist());
+                resetAMLLTimeline();
                 clearLyricCache();
                 lyricScroll = 0f;
                 lyricScrollVelocity = 0f;
@@ -784,6 +793,32 @@ public class Musicpage extends Screen {
         }
     }
 
+    private boolean isAttachedBgLine(int index) {
+        if (index <= 0 || index >= lyricLines.size()) return false;
+        LyricLine line = lyricLines.get(index);
+        LyricLine prev = lyricLines.get(index - 1);
+        return line.isBG() && !prev.isBG() && Math.abs(line.startTime() - prev.startTime()) < 0.001f;
+    }
+
+    private int attachedBgIndex(int mainIndex) {
+        int bgIndex = mainIndex + 1;
+        return bgIndex < lyricLines.size() && isAttachedBgLine(bgIndex) ? bgIndex : -1;
+    }
+
+    private int groupMainIndex(int index) {
+        return isAttachedBgLine(index) ? index - 1 : index;
+    }
+
+    private float getLyricGroupHeight(int index, int activeIndex, float s) {
+        int mainIndex = groupMainIndex(index);
+        float mainH = getLineContentHeight(mainIndex, activeIndex, s);
+        int bgIndex = attachedBgIndex(mainIndex);
+        if (bgIndex < 0) return mainH;
+        float bgH = getLineContentHeight(bgIndex, activeIndex, s);
+        boolean groupActive = isActiveLine(mainIndex, activeIndex) || isActiveLine(bgIndex, activeIndex);
+        return mainH + (groupActive ? bgH : 0f);
+    }
+
     private boolean ensureLyricCache(Typeface tf, float maxWidth, float activePreferred, float inactivePreferred, float s) {
         if (tf == null) return false;
         if (lyricCache.size() == lyricLines.size() && Math.abs(lyricCacheWidth - maxWidth) < 0.5f && Math.abs(lyricCacheScale - s) < 0.001f && Math.abs(lyricCacheActiveSize - activePreferred) < 0.001f && Math.abs(lyricCacheInactiveSize - inactivePreferred) < 0.001f && lyricCacheTypeface == tf) return false;
@@ -795,33 +830,281 @@ public class Musicpage extends Screen {
         lyricCacheTypeface = tf;
         for (LyricLine line : lyricLines) {
             String text = line.text();
-            float activeSize = fitLyricTextSize(text, tf, activePreferred, 12f, maxWidth);
+            float baseSize = line.isBG() ? activePreferred * 0.7f : activePreferred;
+            float activeSize = fitLyricTextSize(text, tf, baseSize, 12f, maxWidth);
             float inactiveSize = activeSize;
-            TextImage active = createLyricTextImage(text, tf, activeSize, WHITE, 3.2f * s, false, maxWidth);
-            TextImage inactive = createLyricTextImage(text, tf, inactiveSize, WHITE, 5.6f * s, true, maxWidth);
-            TextImage hover = createLyricTextImage(text, tf, inactiveSize, WHITE, 0f, true, maxWidth);
-            lyricCache.add(new CachedLyricLine(active, inactive, hover));
+            TextImage active = createLyricTextImage(line, tf, activeSize, WHITE, 0f, false, maxWidth, false, 0f);
+            TextImage inactive = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
+            TextImage hover = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
+            TextImage blurred = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, amllMaxLineBlurPad(s));
+            CachedLyricLine cached = new CachedLyricLine(active, inactive, hover, blurred);
+            cached.lineRef = line;
+            if (line.isDynamic()) {
+                cached.setDynamicWordRanges(measureDynamicWordRanges(line, tf, activeSize, maxWidth));
+                TextImage white = createLyricTextImage(line, tf, activeSize, WHITE, 0f, false, maxWidth, true, active.pad);
+                cached.whiteImage = white.image;
+            }
+            lyricCache.add(cached);
         }
         return true;
     }
 
-    private TextImage createLyricTextImage(String text, Typeface tf, float size, int color, float blurSigma, boolean drawFaintCore, float maxWidth) {
-        if (text == null) text = "";
+    private java.util.List<WordRange> measureDynamicWordRanges(LyricLine line, Typeface tf, float size, float maxWidth) {
+        java.util.List<WordRange> ranges = new ArrayList<>();
+        if (line.words() == null || line.words().isEmpty()) return ranges;
+        float linePadX = amllLyricLinePaddingX(size);
+        float linePadY = amllLyricLinePaddingY(size);
+        boolean hasRuby = hasRubyWords(line);
+        String romanText = effectiveRomanText(line);
+        float rubySize = size * 0.5f;
+        float transSize = size * 0.75f;
+        float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
+        String[] wrappedLines = wrapText(line.text(), tf, size, textMaxWidth);
+        String[] transLines = line.translation() == null || line.translation().isBlank() ? new String[0] : wrapText(line.translation(), tf, transSize, textMaxWidth);
+        String[] romanLines = romanText.isEmpty() ? new String[0] : wrapText(romanText, tf, transSize, textMaxWidth);
+        float baseLineH;
+        float rubyLineH;
+        float subLineH;
+        try (Font font = new Font(tf, size); Font rubyFont = new Font(tf, rubySize); Font subFont = new Font(tf, transSize)) {
+            baseLineH = Math.max(1f, (font.getMetrics().getDescent() - font.getMetrics().getAscent()) * 1.20f);
+            rubyLineH = hasRuby ? Math.max(1f, (rubyFont.getMetrics().getDescent() - rubyFont.getMetrics().getAscent()) * 1.05f) : 0f;
+            subLineH = Math.max(1f, (subFont.getMetrics().getDescent() - subFont.getMetrics().getAscent()) * 1.20f);
+        }
+        float mainBlockLineH = baseLineH + rubyLineH;
+        float romanY = -1f;
+        float romanH = 0f;
+        float romanW = 0f;
+        float maxLineW = 1f;
+        for (String wrappedLine : wrappedLines) maxLineW = Math.max(maxLineW, renderer.measureText(wrappedLine, tf, size));
+        for (String transLine : transLines) maxLineW = Math.max(maxLineW, renderer.measureText(transLine, tf, transSize));
+        if (romanLines.length > 0) {
+            romanY = linePadY + mainBlockLineH * wrappedLines.length + linePadY * 0.5f + subLineH * transLines.length;
+            romanH = subLineH * romanLines.length;
+            for (String romanLine : romanLines) {
+                romanW = Math.max(romanW, renderer.measureText(romanLine, tf, transSize));
+                maxLineW = Math.max(maxLineW, renderer.measureText(romanLine, tf, transSize));
+            }
+        }
+        Map<Integer, RomanWordBox> romanWordBoxes = measureRomanWordBoxes(line, tf, transSize, linePadX, romanY, subLineH, textMaxWidth, maxLineW, romanLines);
+        int lineIndex = 0;
+        float x = linePadX;
+        float currentLineWidth = wrappedLines.length > 0 ? renderer.measureText(wrappedLines[0], tf, size) : 0f;
+        int wordIndex = 0;
+        int wordCount = line.words().size();
+        for (LyricWord word : line.words()) {
+            String text = word.word() == null ? "" : word.word();
+            float wordW = Math.max(0f, renderer.measureText(text, tf, size));
+            if (lineIndex < wrappedLines.length && x > linePadX && x + wordW - linePadX > currentLineWidth + 0.5f) {
+                lineIndex++;
+                x = linePadX;
+                currentLineWidth = lineIndex < wrappedLines.length ? renderer.measureText(wrappedLines[lineIndex], tf, size) : textMaxWidth;
+            }
+            float blockY = linePadY + mainBlockLineH * lineIndex;
+            float rubyY = hasRuby ? blockY : -1f;
+            float baseY = blockY + rubyLineH;
+            boolean emphasize = shouldAMLLWordEmphasize(text, word.endTime() - word.startTime());
+            RomanWordBox romanBox = nearestRomanWordBox(romanWordBoxes, wordIndex, wordCount);
+            java.util.List<EmphasisSlice> emphasisSlices = measureEmphasisSlices(text, tf, size, x, x + wordW);
+            ranges.add(new WordRange(
+                    word.startTime(), word.endTime(), x, x + wordW,
+                    blockY, mainBlockLineH, baseY, baseLineH, rubyY, rubyLineH,
+                    romanY, romanH, linePadX, linePadX + romanW,
+                    romanBox == null ? -1f : romanBox.startX(),
+                    romanBox == null ? -1f : romanBox.endX(),
+                    romanBox == null ? -1f : romanBox.y(),
+                    romanBox == null ? 0f : romanBox.h(),
+                    text, emphasisSlices,
+                    lineIndex, wordIndex, wordCount, emphasize,
+                    word.ruby() == null ? List.of() : word.ruby()));
+            x += wordW;
+            wordIndex++;
+        }
+        return ranges;
+    }
+
+    private java.util.List<EmphasisSlice> measureEmphasisSlices(String text, Typeface tf, float size, float startX, float endX) {
+        ArrayList<EmphasisSlice> slices = new ArrayList<>();
+        if (text == null || text.isBlank()) {
+            slices.add(new EmphasisSlice(startX, endX));
+            return slices;
+        }
+        ArrayList<EmphasisSlice> raw = new ArrayList<>();
+        float cursor = 0f;
+        for (int i = 0; i < text.length();) {
+            int cp = text.codePointAt(i);
+            int len = Character.charCount(cp);
+            String part = text.substring(i, i + len);
+            float w = Math.max(0f, renderer.measureText(part, tf, size));
+            if (!Character.isWhitespace(cp)) raw.add(new EmphasisSlice(cursor, cursor + w));
+            cursor += w;
+            i += len;
+        }
+        if (raw.isEmpty() || cursor <= 0f) {
+            slices.add(new EmphasisSlice(startX, endX));
+            return slices;
+        }
+        float scale = Math.max(0f, endX - startX) / cursor;
+        for (EmphasisSlice slice : raw) {
+            slices.add(new EmphasisSlice(startX + slice.startX() * scale, startX + slice.endX() * scale));
+        }
+        return slices;
+    }
+
+    private RomanWordBox nearestRomanWordBox(Map<Integer, RomanWordBox> boxes, int wordIndex, int wordCount) {
+        RomanWordBox direct = boxes.get(wordIndex);
+        if (direct != null) return direct;
+        for (int d = 1; d < wordCount; d++) {
+            RomanWordBox before = boxes.get(wordIndex - d);
+            if (before != null) return before;
+            RomanWordBox after = boxes.get(wordIndex + d);
+            if (after != null) return after;
+        }
+        return null;
+    }
+
+    private Map<Integer, RomanWordBox> measureRomanWordBoxes(LyricLine line, Typeface tf, float romanSize, float linePadX, float romanY, float romanLineH, float textMaxWidth, float maxLineW, String[] romanLines) {
+        Map<Integer, RomanWordBox> result = new HashMap<>();
+        if (line == null || line.words() == null || romanLines == null || romanLines.length == 0 || romanY < 0f) return result;
+        int romanLineIndex = 0;
+        float x = 0f;
+        float currentLineWidth = romanLines.length > 0 ? renderer.measureText(romanLines[0], tf, romanSize) : textMaxWidth;
+        boolean hasRomanBefore = false;
+        for (int i = 0; i < line.words().size(); i++) {
+            LyricWord word = line.words().get(i);
+            String roman = word.romanWord() == null ? "" : word.romanWord().trim();
+            if (roman.isEmpty()) continue;
+            boolean leadingSpace = hasRomanBefore;
+            float wordW = renderer.measureText(roman, tf, romanSize);
+            float spaceW = leadingSpace ? renderer.measureText(" ", tf, romanSize) : 0f;
+            float tokenW = wordW + spaceW;
+            if (romanLineIndex < romanLines.length && x > 0f && x + tokenW > currentLineWidth + 0.5f) {
+                romanLineIndex++;
+                x = 0f;
+                leadingSpace = false;
+                spaceW = 0f;
+                tokenW = wordW;
+                currentLineWidth = romanLineIndex < romanLines.length ? renderer.measureText(romanLines[romanLineIndex], tf, romanSize) : textMaxWidth;
+            }
+            float lineStartX = linePadX;
+            if (line.isDuet()) lineStartX = maxLineW + linePadX - currentLineWidth;
+            float startX = lineStartX + x + spaceW;
+            float y = romanY + romanLineH * romanLineIndex;
+            result.put(i, new RomanWordBox(startX, startX + wordW, y, romanLineH));
+            x += tokenW;
+            hasRomanBefore = true;
+        }
+        return result;
+    }
+
+    private String effectiveRomanText(LyricLine line) {
+        if (line == null) return "";
+        if (line.romanization() != null && !line.romanization().isBlank()) return line.romanization();
+        if (line.words() == null || line.words().isEmpty()) return "";
+        StringBuilder roman = new StringBuilder();
+        for (LyricWord word : line.words()) {
+            if (word.romanWord() == null || word.romanWord().isBlank()) continue;
+            if (!roman.isEmpty()) roman.append(' ');
+            roman.append(word.romanWord().trim());
+        }
+        return roman.toString();
+    }
+
+    private String effectiveRubyText(LyricLine line) {
+        if (line == null || line.words() == null || line.words().isEmpty()) return "";
+        StringBuilder ruby = new StringBuilder();
+        for (LyricWord word : line.words()) {
+            if (word.ruby() == null || word.ruby().isEmpty()) continue;
+            for (RubyText rt : word.ruby()) {
+                if (rt.text() == null || rt.text().isBlank()) continue;
+                if (!ruby.isEmpty()) ruby.append(' ');
+                ruby.append(rt.text().trim());
+            }
+        }
+        return ruby.toString();
+    }
+
+    private boolean hasRubyWords(LyricLine line) {
+        if (line == null || line.words() == null) return false;
+        for (LyricWord word : line.words()) {
+            if (word.ruby() != null && !word.ruby().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private void drawRubyForMainLine(Canvas sc, LyricLine line, Typeface tf, float rubySize, Font rubyFont, Paint paint, int targetLineIndex, float lineStartX, float rubyY, String[] mainLines, float textMaxWidth) {
+        if (line.words() == null || line.words().isEmpty()) return;
+        int lineIndex = 0;
+        float x = 0f;
+        float mainSize = rubySize * 2f;
+        float currentLineWidth = mainLines.length > 0 ? renderer.measureText(mainLines[0], tf, mainSize) : textMaxWidth;
+        int oldColor = paint.getColor();
+        paint.setColor(withAlpha(oldColor, alphaOf(oldColor) * 0.8f));
+        for (LyricWord word : line.words()) {
+            String text = word.word() == null ? "" : word.word();
+            float wordW = renderer.measureText(text, tf, mainSize);
+            if (lineIndex < mainLines.length && x > 0f && x + wordW > currentLineWidth + 0.5f) {
+                lineIndex++;
+                x = 0f;
+                currentLineWidth = lineIndex < mainLines.length ? renderer.measureText(mainLines[lineIndex], tf, mainSize) : textMaxWidth;
+            }
+            if (lineIndex == targetLineIndex && word.ruby() != null && !word.ruby().isEmpty()) {
+                String ruby = rubyTextForWord(word);
+                float rubyW = renderer.measureText(ruby, tf, rubySize);
+                float rubyX = lineStartX + x + (wordW - rubyW) * 0.5f;
+                sc.drawString(ruby, rubyX, rubyY - rubyFont.getMetrics().getAscent(), rubyFont, paint);
+            }
+            x += wordW;
+        }
+        paint.setColor(oldColor);
+    }
+
+    private String rubyTextForWord(LyricWord word) {
+        if (word == null || word.ruby() == null || word.ruby().isEmpty()) return "";
+        StringBuilder result = new StringBuilder();
+        for (RubyText rt : word.ruby()) {
+            if (rt.text() == null || rt.text().isBlank()) continue;
+            result.append(rt.text().trim());
+        }
+        return result.toString();
+    }
+
+    private boolean shouldAMLLWordEmphasize(String word, float durationSeconds) {
+        if (word == null) return false;
+        if (containsCjk(word)) return durationSeconds >= 1f;
+        int len = word.trim().length();
+        return durationSeconds >= 1f && len <= 7 && len > 1;
+    }
+
+    private TextImage createLyricTextImage(LyricLine lyricLine, Typeface tf, float size, int color, float blurSigma, boolean drawFaintCore, float maxWidth, boolean isWhiteMask, float activePadOverride) {
+        String mainText = lyricLine.text() == null ? "" : lyricLine.text();
+        String transText = lyricLine.translation() == null ? "" : lyricLine.translation();
+        String romanText = effectiveRomanText(lyricLine);
+        boolean hasRuby = hasRubyWords(lyricLine);
         float linePadX = amllLyricLinePaddingX(size);
         float linePadY = amllLyricLinePaddingY(size);
         float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
-        String[] lines = wrapText(text, tf, size, textMaxWidth);
+        String[] mainLines = wrapText(mainText, tf, size, textMaxWidth);
+        float rubySize = size * 0.5f;
+        float transSize = size * 0.75f;
+        String[] transLines = transText.isEmpty() ? new String[0] : wrapText(transText, tf, transSize, textMaxWidth);
+        String[] romanLines = romanText.isEmpty() ? new String[0] : wrapText(romanText, tf, transSize, textMaxWidth);
         float scale = Math.max(1f, guiScale);
-        try (Font font = new Font(tf, size * scale)) {
+        try (Font font = new Font(tf, size * scale); Font rubyFont = new Font(tf, rubySize * scale); Font transFont = new Font(tf, transSize * scale)) {
             float lineH = Math.max(1f, (font.getMetrics().getDescent() - font.getMetrics().getAscent()) / scale * 1.20f);
+            float rubyLineH = Math.max(1f, (rubyFont.getMetrics().getDescent() - rubyFont.getMetrics().getAscent()) / scale * 1.05f);
+            float transLineH = Math.max(1f, (transFont.getMetrics().getDescent() - transFont.getMetrics().getAscent()) / scale * 1.20f);
             float maxLineW = 1f;
-            for (String line : lines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, size));
+            for (String line : mainLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, size));
+            for (String line : transLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, transSize));
+            for (String line : romanLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, transSize));
             float blurPad = blurSigma > 0f ? Math.max(10f, blurSigma * (drawFaintCore ? 3.0f : 5.5f)) : 0f;
-            float pad = blurPad + 2f;
+            float pad = activePadOverride > 0f ? activePadOverride : (blurPad + 2f);
             float textX = pad + linePadX;
             float textY = pad + linePadY;
+            boolean alignRight = lyricLine.isDuet();
             float logicalW = maxLineW + linePadX * 2f + pad * 2f;
-            float logicalH = lineH * lines.length + linePadY * 2f + pad * 2f;
+            float mainBlockLineH = lineH + (hasRuby ? rubyLineH : 0f);
+            float logicalH = mainBlockLineH * mainLines.length + transLineH * (transLines.length + romanLines.length) + ((transLines.length + romanLines.length) > 0 ? linePadY * 0.5f : 0f) + linePadY * 2f + pad * 2f;
             int imgW = Math.max(1, Math.round(logicalW * scale));
             int imgH = Math.max(1, Math.round(logicalH * scale));
             SkijaRenderer textRenderer = new SkijaRenderer("music_page_lyric_line", imgW, imgH);
@@ -829,27 +1112,61 @@ public class Musicpage extends Screen {
             Canvas sc = textRenderer.canvas();
             sc.save();
             sc.scale(scale, scale);
-            try (Font logicalFont = new Font(tf, size); Paint paint = new Paint()) {
+            try (Font logicalFont = new Font(tf, size); Font logicalRubyFont = new Font(tf, rubySize); Font logicalTransFont = new Font(tf, transSize); Paint paint = new Paint()) {
                 paint.setColor(color);
                 paint.setAntiAlias(true);
-                if (blurSigma > 0f) {
+                Runnable drawTexts = () -> {
+                    float curY = textY;
+                    for (int lineIndex = 0; lineIndex < mainLines.length; lineIndex++) {
+                        String line = mainLines[lineIndex];
+                        float lineStartX = textX;
+                        if (alignRight) lineStartX = logicalW - pad - linePadX - renderer.measureText(line, tf, size);
+                        if (hasRuby) {
+                            drawRubyForMainLine(sc, lyricLine, tf, rubySize, logicalRubyFont, paint, lineIndex, lineStartX, curY, mainLines, textMaxWidth);
+                            curY += rubyLineH;
+                        }
+                        sc.drawString(line, lineStartX, curY - logicalFont.getMetrics().getAscent(), logicalFont, paint);
+                        curY += lineH;
+                    }
+                    if (transLines.length > 0 || romanLines.length > 0) {
+                        curY += linePadY * 0.5f;
+                        int oldColor = paint.getColor();
+                        paint.setColor(withAlpha(oldColor, alphaOf(oldColor) * 0.8f));
+                        for (String line : transLines) {
+                            float curX = textX;
+                            if (alignRight) curX = logicalW - pad - linePadX - renderer.measureText(line, tf, transSize);
+                            sc.drawString(line, curX, curY - logicalTransFont.getMetrics().getAscent(), logicalTransFont, paint);
+                            curY += transLineH;
+                        }
+                        for (String line : romanLines) {
+                            float curX = textX;
+                            if (alignRight) curX = logicalW - pad - linePadX - renderer.measureText(line, tf, transSize);
+                            sc.drawString(line, curX, curY - logicalTransFont.getMetrics().getAscent(), logicalTransFont, paint);
+                            curY += transLineH;
+                        }
+                        paint.setColor(oldColor);
+                    }
+                };
+                if (isWhiteMask) {
+                    drawTexts.run();
+                } else if (blurSigma > 0f) {
                     if (!drawFaintCore) {
                         try (MaskFilter outerBlur = MaskFilter.makeBlur(FilterBlurMode.NORMAL, blurSigma * 2.15f, false)) {
                             paint.setMaskFilter(outerBlur);
                             paint.setColor(0x34FFFFFF);
-                            drawTextLines(sc, lines, textX, textY, logicalFont, paint, lineH);
+                            drawTexts.run();
                         }
                     }
                     try (MaskFilter blur = MaskFilter.makeBlur(FilterBlurMode.NORMAL, blurSigma, false)) {
                         paint.setMaskFilter(blur);
                         paint.setColor(drawFaintCore ? color : 0xA6FFFFFF);
-                        drawTextLines(sc, lines, textX, textY, logicalFont, paint, lineH);
+                        drawTexts.run();
                     }
                     paint.setMaskFilter(null);
                     paint.setColor(drawFaintCore ? 0x70FFFFFF : color);
-                    drawTextLines(sc, lines, textX, textY, logicalFont, paint, lineH);
+                    drawTexts.run();
                 } else {
-                    drawTextLines(sc, lines, textX, textY, logicalFont, paint, lineH);
+                    drawTexts.run();
                 }
             }
             sc.restore();
@@ -1039,8 +1356,7 @@ public class Musicpage extends Screen {
     }
 
     private boolean isCjkCodePoint(int cp) {
-        Character.UnicodeScript script = Character.UnicodeScript.of(cp);
-        return script == Character.UnicodeScript.HAN || script == Character.UnicodeScript.HIRAGANA || script == Character.UnicodeScript.KATAKANA || script == Character.UnicodeScript.HANGUL || script == Character.UnicodeScript.BOPOMOFO;
+        return Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN || (cp >= 0x0800 && cp <= 0x9FFC);
     }
 
     private void clearLyricCache() {
@@ -1054,7 +1370,7 @@ public class Musicpage extends Screen {
     }
 
     private boolean useLineLyricTextures() {
-        return currentUiTrack != null && !lyricLines.isEmpty();
+        return true;
     }
 
     private void updateLyricAnimation(int active, float currentSeconds, float s, float dt) {
@@ -1067,13 +1383,13 @@ public class Musicpage extends Screen {
         }
         boolean snap = lyricSnapOnNextRender;
         InterludeState interlude = computeInterlude(active, currentSeconds);
-        updateInterludeSlotAnimation(interlude.active(), dt, snap);
+        updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude);
         float targetScroll = lyricScrollTarget(active, s, interlude);
         if (snap) {
             lyricScroll = targetScroll;
             lyricScrollVelocity = 0f;
         } else {
-            updateLyricSpring(active, targetScroll, dt);
+            updateLyricSpring(active, targetScroll, dt, interlude.active());
         }
         lyricLayerBlitOffsetY = lyricRenderScroll - lyricScroll;
         if (!useLineLyricTextures()) {
@@ -1088,21 +1404,22 @@ public class Musicpage extends Screen {
         float gap = amllLyricLineGap(s);
         float target = 0f;
         int count = Math.min(Math.max(active, 0), lyricLines.size());
-        float slotHeight = interludeSlotHeight(s) * interludeSlotVisual;
-        boolean reserveSlot = interlude.active() || slotHeight > 0.05f;
+        float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
         for (int i = 0; i < count; i++) {
-            target += getLineContentHeight(i, active, s) + gap;
-            if (reserveSlot && i == interlude.anchor()) target += slotHeight;
+            if (isAttachedBgLine(i)) continue;
+            target += getLyricGroupHeight(i, active, s) + gap;
+            if (interlude.active() && i == interlude.anchor()) target += slotHeight;
         }
-        if (active >= 0 && active < lyricLines.size()) target += getLineContentHeight(active, active, s) * 0.5f;
+        if (active >= 0 && active < lyricLines.size()) target += getLyricGroupHeight(active, active, s) * 0.5f;
         return target;
     }
 
-    private SpringParams lyricSpringParams(int active) {
+    private SpringParams lyricSpringParams(int active, boolean isInterludeActive) {
+        if (isInterludeActive) return new SpringParams(90f, 15f);
         float stiffness = 90f;
         float damping = 15f;
         if (active > 0 && active < lyricLines.size()) {
-            float intervalMs = (lyricLines.get(active).time() - lyricLines.get(active - 1).time()) * 1000f;
+            float intervalMs = (lyricLines.get(active).startTime() - lyricLines.get(active - 1).startTime()) * 1000f;
             float clampedInterval = clamp(intervalMs, 100f, 800f);
             float ratio = 1f - (clampedInterval - 100f) / 700f;
             ratio = (float) Math.pow(ratio, 0.2f);
@@ -1112,9 +1429,9 @@ public class Musicpage extends Screen {
         return new SpringParams(stiffness, damping);
     }
 
-    private void updateLyricSpring(int active, float targetScroll, float dt) {
+    private void updateLyricSpring(int active, float targetScroll, float dt, boolean isInterludeActive) {
         float safeDt = clamp(dt, 0f, 0.05f);
-        SpringParams params = lyricSpringParams(active);
+        SpringParams params = lyricSpringParams(active, isInterludeActive);
         float displacement = targetScroll - lyricScroll;
         lyricScrollVelocity += displacement * params.stiffness() * safeDt;
         lyricScrollVelocity *= (float) Math.exp(-params.damping() * safeDt);
@@ -1128,64 +1445,45 @@ public class Musicpage extends Screen {
     private void updateLyricLineAnimations(int active, float currentSeconds, float s, float dt, boolean snap, InterludeState interlude) {
         if (lyricCache.size() != lyricLines.size()) return;
         float safeDt = clamp(dt, 0f, 0.05f);
-        SpringParams params = lyricSpringParams(active);
+        SpringParams params = lyricSpringParams(active, interlude.active());
         float gap = amllLyricLineGap(s);
-        float slotHeight = interludeSlotHeight(s) * interludeSlotVisual;
-        boolean reserveSlot = interlude.active() || slotHeight > 0.05f;
+        float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
         boolean showDots = interlude.active();
         float anchorY = layoutLyricAnchorY > 0f ? layoutLyricAnchorY : layoutLyricTop + layoutLyricH * 0.35f;
         float baseY = anchorY - lyricScroll;
         float offsetY = 0f;
         boolean dotsPlaced = false;
         for (int i = 0; i < lyricCache.size(); i++) {
-            if (reserveSlot && !dotsPlaced && i == interlude.anchor() + 1) {
+            if (isAttachedBgLine(i)) continue;
+            if (interlude.active() && !dotsPlaced && i == interlude.anchor() + 1) {
                 updateInterludeAnimation(showDots ? baseY + offsetY : interludeY, showDots, s, safeDt, snap);
                 offsetY += slotHeight;
                 dotsPlaced = true;
             }
+
             CachedLyricLine line = lyricCache.get(i);
             LyricPresentation presentation = computeLyricPresentation(i, active);
             float targetY = baseY + offsetY;
-            if (!line.initialized || snap) {
-                line.currentY = targetY;
-                line.velocityY = 0f;
-                line.currentScale = presentation.scale();
-                line.velocityScale = 0f;
-                line.currentOpacity = presentation.opacity();
-                line.velocityOpacity = 0f;
-                line.initialized = true;
-            } else {
-                float dy = targetY - line.currentY;
-                line.velocityY += dy * params.stiffness() * safeDt;
-                line.velocityY *= (float) Math.exp(-params.damping() * safeDt);
-                line.currentY += line.velocityY * safeDt;
-                float scaleStiffness = params.stiffness() * 1.08f;
-                float scaleDamping = (float) Math.sqrt(scaleStiffness) * 2.15f;
-                float ds = presentation.scale() - line.currentScale;
-                line.velocityScale += ds * scaleStiffness * safeDt;
-                line.velocityScale *= (float) Math.exp(-scaleDamping * safeDt);
-                line.currentScale += line.velocityScale * safeDt;
-                float opacityStiffness = params.stiffness() * 1.35f;
-                float opacityDamping = (float) Math.sqrt(opacityStiffness) * 2.1f;
-                float da = presentation.opacity() - line.currentOpacity;
-                line.velocityOpacity += da * opacityStiffness * safeDt;
-                line.velocityOpacity *= (float) Math.exp(-opacityDamping * safeDt);
-                line.currentOpacity += line.velocityOpacity * safeDt;
-                if (Math.abs(dy) < 0.20f && Math.abs(line.velocityY) < 0.30f) {
-                    line.currentY = targetY;
-                    line.velocityY = 0f;
-                }
-                if (Math.abs(ds) < 0.001f && Math.abs(line.velocityScale) < 0.002f) {
-                    line.currentScale = presentation.scale();
-                    line.velocityScale = 0f;
-                }
-                if (Math.abs(da) < 0.004f && Math.abs(line.velocityOpacity) < 0.006f) {
-                    line.currentOpacity = presentation.opacity();
-                    line.velocityOpacity = 0f;
-                }
+            boolean dynamicMask = isActiveLine(i, active) && line.lineRef != null && line.lineRef.isDynamic();
+            updateCachedLyricLine(line, targetY, presentation, params, safeDt, snap, computeAMLLGroupBlur(i), dynamicMask);
+
+            int bgIndex = attachedBgIndex(i);
+            float groupH = getLineContentHeight(i, active, s);
+            if (bgIndex >= 0) {
+                CachedLyricLine bgLine = lyricCache.get(bgIndex);
+                boolean groupActive = isActiveLine(i, active) || isActiveLine(bgIndex, active);
+                float bgH = getLineContentHeight(bgIndex, active, s);
+                float bgProgress = groupActive ? 1f : 0f;
+                float bgSlideY = -80f * (1f - bgProgress);
+                float bgTargetY = targetY + groupH + bgH * (bgSlideY / 100f);
+                LyricPresentation bgPresentation = new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.8f);
+                boolean bgDynamicMask = isActiveLine(bgIndex, active) && bgLine.lineRef != null && bgLine.lineRef.isDynamic();
+                updateCachedLyricLine(bgLine, bgTargetY, bgPresentation, params, safeDt, snap, computeAMLLGroupBlur(bgIndex), bgDynamicMask);
+                if (groupActive) groupH += bgH;
             }
-            offsetY += getLineContentHeight(i, active, s) + gap;
-            if (reserveSlot && !dotsPlaced && i == interlude.anchor()) {
+
+            offsetY += groupH + gap;
+            if (interlude.active() && !dotsPlaced && i == interlude.anchor()) {
                 updateInterludeAnimation(showDots ? baseY + offsetY - gap * 0.5f : interludeY, showDots, s, safeDt, snap);
                 offsetY += slotHeight;
                 dotsPlaced = true;
@@ -1195,6 +1493,7 @@ public class Musicpage extends Screen {
             interludeAnchor = interlude.anchor();
             interludeStartTime = interlude.start();
             interludeEndTime = interlude.end();
+            interludeNextDuet = interlude.nextDuet();
             interludeCurrentTime = currentSeconds;
             if (!dotsPlaced) updateInterludeAnimation(baseY + offsetY, true, s, safeDt, snap);
         } else if (!dotsPlaced || interludeOpacity > 0.001f) {
@@ -1202,95 +1501,124 @@ public class Musicpage extends Screen {
         }
     }
 
-    private InterludeState computeInterlude(int active, float currentSeconds) {
-        if (lyricLines.isEmpty()) return new InterludeState(false, Integer.MIN_VALUE, 0f, 0f);
-        int anchor = active;
-        int next = active + 1;
-        if (active < 0) {
-            anchor = -1;
-            next = 0;
+    private void updateCachedLyricLine(CachedLyricLine line, float targetY, LyricPresentation presentation, SpringParams params, float safeDt, boolean snap, float targetBlur, boolean dynamicMask) {
+        if (!line.initialized || snap) {
+            line.currentY = targetY;
+            line.velocityY = 0f;
+            line.currentScale = presentation.scale();
+            line.velocityScale = 0f;
+            line.currentOpacity = presentation.opacity();
+            line.velocityOpacity = 0f;
+            line.currentBlurVisual = targetBlur;
+            line.velocityBlur = 0f;
+            updateAMLLMaskAlpha(line, safeDt, true, dynamicMask);
+            line.initialized = true;
+            return;
         }
-        if (next < 0 || next >= lyricLines.size()) return closingInterludeState(anchor);
-        float prevStart = anchor >= 0 ? lyricLines.get(anchor).time() : 0f;
-        float nextStart = lyricLines.get(next).time();
-        float gapEnd = Math.max(prevStart, nextStart - 0.25f);
-        float lineEnd = anchor >= 0 ? estimatedInterludeStart(anchor, nextStart) : 0f;
-        lineEnd = Math.min(lineEnd, gapEnd);
-        if (gapEnd - lineEnd < 4f) return closingInterludeState(anchor);
-        boolean activeGap = currentSeconds >= lineEnd && currentSeconds < gapEnd;
-        return activeGap ? new InterludeState(true, anchor, lineEnd, gapEnd) : closingInterludeState(anchor);
+
+        float dy = targetY - line.currentY;
+        line.velocityY += dy * params.stiffness() * safeDt;
+        line.velocityY *= (float) Math.exp(-params.damping() * safeDt);
+        line.currentY += line.velocityY * safeDt;
+
+        float scaleStiffness = params.stiffness() * 1.08f;
+        float scaleDamping = (float) Math.sqrt(scaleStiffness) * 2.15f;
+        float ds = presentation.scale() - line.currentScale;
+        line.velocityScale += ds * scaleStiffness * safeDt;
+        line.velocityScale *= (float) Math.exp(-scaleDamping * safeDt);
+        line.currentScale += line.velocityScale * safeDt;
+
+        float opacityStiffness = params.stiffness() * 1.35f;
+        float opacityDamping = (float) Math.sqrt(opacityStiffness) * 2.1f;
+        float da = presentation.opacity() - line.currentOpacity;
+        line.velocityOpacity += da * opacityStiffness * safeDt;
+        line.velocityOpacity *= (float) Math.exp(-opacityDamping * safeDt);
+        line.currentOpacity += line.velocityOpacity * safeDt;
+
+        float blurStiffness = params.stiffness() * 0.82f;
+        float blurDamping = (float) Math.sqrt(blurStiffness) * 2.0f;
+        float db = targetBlur - line.currentBlurVisual;
+        line.velocityBlur += db * blurStiffness * safeDt;
+        line.velocityBlur *= (float) Math.exp(-blurDamping * safeDt);
+        line.currentBlurVisual += line.velocityBlur * safeDt;
+
+        if (Math.abs(dy) < 0.20f && Math.abs(line.velocityY) < 0.30f) {
+            line.currentY = targetY;
+            line.velocityY = 0f;
+        }
+        if (Math.abs(ds) < 0.002f && Math.abs(line.velocityScale) < 0.002f) {
+            line.currentScale = presentation.scale();
+            line.velocityScale = 0f;
+        }
+        if (Math.abs(da) < 0.002f && Math.abs(line.velocityOpacity) < 0.002f) {
+            line.currentOpacity = presentation.opacity();
+            line.velocityOpacity = 0f;
+        }
+        if (Math.abs(db) < 0.01f && Math.abs(line.velocityBlur) < 0.01f) {
+            line.currentBlurVisual = targetBlur;
+            line.velocityBlur = 0f;
+        }
+        updateAMLLMaskAlpha(line, safeDt, false, dynamicMask);
+    }
+
+    private void updateAMLLMaskAlpha(CachedLyricLine line, float dt, boolean snap, boolean dynamicMask) {
+        float factor = clamp01((line.currentScale - 0.97f) / 0.03f);
+        float dynamicDarkAlpha = factor * 0.2f + 0.2f;
+        float dynamicBrightAlpha = factor * 0.8f + 0.2f;
+        line.targetBrightAlpha = dynamicMask ? dynamicBrightAlpha : dynamicDarkAlpha;
+        line.targetDarkAlpha = dynamicDarkAlpha;
+        if (snap) {
+            line.currentBrightAlpha = line.targetBrightAlpha;
+            line.currentDarkAlpha = line.targetDarkAlpha;
+            return;
+        }
+        float safeDt = dt <= 0f ? 0.016f : dt;
+        float brightSpeed = line.targetBrightAlpha > line.currentBrightAlpha ? 50f : 7f;
+        float brightFactor = 1f - (float) Math.exp(-brightSpeed * safeDt);
+        if (Math.abs(line.targetBrightAlpha - line.currentBrightAlpha) < 0.001f) line.currentBrightAlpha = line.targetBrightAlpha;
+        else line.currentBrightAlpha += (line.targetBrightAlpha - line.currentBrightAlpha) * brightFactor;
+        float darkSpeed = line.targetDarkAlpha > line.currentDarkAlpha ? 50f : 7f;
+        float darkFactor = 1f - (float) Math.exp(-darkSpeed * safeDt);
+        if (Math.abs(line.targetDarkAlpha - line.currentDarkAlpha) < 0.001f) line.currentDarkAlpha = line.targetDarkAlpha;
+        else line.currentDarkAlpha += (line.targetDarkAlpha - line.currentDarkAlpha) * darkFactor;
+    }
+
+    private InterludeState computeInterlude(int active, float currentSeconds) {
+        if (lyricLines.isEmpty()) return new InterludeState(false, Integer.MIN_VALUE, 0f, 0f, false);
+
+        float currentTimeMs = currentSeconds * 1000f + 20f;
+        int checkActive = active;
+
+        for (int k = checkActive - 1; k <= checkActive + 1; k++) {
+            if (k < -1 || k >= lyricLines.size() - 1) continue;
+            float gapStartMs;
+            if (k == -1) {
+                gapStartMs = 0f;
+            } else {
+                gapStartMs = lyricLines.get(k).endTime() * 1000f;
+            }
+            float gapEndMs = Math.max(gapStartMs, lyricLines.get(k + 1).startTime() * 1000f - 250f);
+
+            if (gapEndMs - gapStartMs < 4000f) continue;
+
+            if (gapEndMs > currentTimeMs && gapStartMs < currentTimeMs) {
+                boolean nextDuet = lyricLines.get(k + 1).isDuet();
+                return new InterludeState(true, k, gapStartMs / 1000f, gapEndMs / 1000f, nextDuet);
+            }
+        }
+
+        return closingInterludeState(checkActive);
     }
 
     private InterludeState closingInterludeState(int fallbackAnchor) {
-        if ((interludeSlotVisual > 0.001f || interludeOpacity > 0.001f) && interludeAnchor != Integer.MIN_VALUE) return new InterludeState(false, interludeAnchor, interludeStartTime, interludeEndTime);
-        return new InterludeState(false, fallbackAnchor, 0f, 0f);
+        if (interludeOpacity > 0.001f && interludeAnchor != Integer.MIN_VALUE) return new InterludeState(false, interludeAnchor, interludeStartTime, interludeEndTime, false);
+        return new InterludeState(false, fallbackAnchor, 0f, 0f, false);
     }
 
-    private float estimatedInterludeStart(int index, float nextStart) {
-        if (index < 0 || index >= lyricLines.size()) return 0f;
-        float start = lyricLines.get(index).time();
-        float interval = Math.max(0f, nextStart - start);
-        float estimatedEnd = estimatedLyricEnd(index, nextStart);
-        if (isInterludeMarker(lyricLines.get(index).text())) return estimatedEnd;
-        int chars = lyricCharCount(lyricLines.get(index).text());
-        float ratio = chars <= 4 ? 0.84f : chars <= 10 ? 0.80f : chars <= 18 ? 0.76f : 0.72f;
-        return Math.max(estimatedEnd, start + interval * ratio);
-    }
 
-    private float estimatedLyricEnd(int index, float nextStart) {
-        if (index < 0 || index >= lyricLines.size()) return 0f;
-        int chars = lyricCharCount(lyricLines.get(index).text());
-        float start = lyricLines.get(index).time();
-        float estimated = 1.15f + chars * 0.205f;
-        estimated = clamp(estimated, 2.2f, 6.8f);
-        return Math.min(nextStart, start + estimated);
-    }
-
-    private int lyricCharCount(String raw) {
-        String text = normalizeLyricText(raw);
-        int chars = 0;
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
-            if (!Character.isWhitespace(cp)) chars++;
-            i += Character.charCount(cp);
-        }
-        return chars;
-    }
-
-    private boolean isInterludeMarker(String raw) {
-        String text = normalizeLyricText(raw);
-        if (text.isBlank()) return true;
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
-            if (!Character.isWhitespace(cp) && cp != '♪' && cp != '♫' && cp != '♩' && cp != '♬' && cp != '…' && cp != '.' && cp != '-' && cp != '—' && cp != '_') return false;
-            i += Character.charCount(cp);
-        }
-        return true;
-    }
 
     private float interludeSlotHeight(float s) {
         return amllInterludeDotSize() + amllInterludeDotPaddingY() * 2f;
-    }
-
-    private void updateInterludeSlotAnimation(boolean visible, float dt, boolean snap) {
-        float target = visible ? 1f : 0f;
-        if (snap) {
-            interludeSlotVisual = target;
-            interludeSlotVelocity = 0f;
-            return;
-        }
-        float safeDt = clamp(dt, 0f, 0.05f);
-        float stiffness = visible ? 115f : 95f;
-        float damping = (float) Math.sqrt(stiffness) * 2.35f;
-        float d = target - interludeSlotVisual;
-        interludeSlotVelocity += d * stiffness * safeDt;
-        interludeSlotVelocity *= (float) Math.exp(-damping * safeDt);
-        interludeSlotVisual += interludeSlotVelocity * safeDt;
-        interludeSlotVisual = clamp(interludeSlotVisual, 0f, 1f);
-        if (Math.abs(d) < 0.002f && Math.abs(interludeSlotVelocity) < 0.004f) {
-            interludeSlotVisual = target;
-            interludeSlotVelocity = 0f;
-        }
     }
 
     private void updateInterludeAnimation(float targetY, boolean visible, float s, float dt, boolean snap) {
@@ -1301,16 +1629,20 @@ public class Musicpage extends Screen {
             interludeOpacity = targetOpacity;
             return;
         }
-        float stiffness = visible ? 160f : 120f;
-        float damping = (float) Math.sqrt(stiffness) * 2.1f;
+
+        float safeDt = clamp(dt, 0f, 0.05f);
+        float stiffness = 90f;
+        float damping = 15f;
         float dy = targetY - interludeY;
-        interludeVelocityY += dy * stiffness * dt;
-        interludeVelocityY *= (float) Math.exp(-damping * dt);
-        interludeY += interludeVelocityY * dt;
+        interludeVelocityY += dy * stiffness * safeDt;
+        interludeVelocityY *= (float) Math.exp(-damping * safeDt);
+        interludeY += interludeVelocityY * safeDt;
+
         float opacityDuration = 0.25f;
-        float opacityStep = dt / Math.max(0.001f, opacityDuration);
+        float opacityStep = safeDt / Math.max(0.001f, opacityDuration);
         if (interludeOpacity < targetOpacity) interludeOpacity = Math.min(targetOpacity, interludeOpacity + opacityStep);
         else if (interludeOpacity > targetOpacity) interludeOpacity = Math.max(targetOpacity, interludeOpacity - opacityStep);
+
         if (Math.abs(dy) < 0.20f && Math.abs(interludeVelocityY) < 0.30f) {
             interludeY = targetY;
             interludeVelocityY = 0f;
@@ -1318,12 +1650,34 @@ public class Musicpage extends Screen {
     }
 
     private LyricPresentation computeLyricPresentation(int index, int active) {
-        int dist = Math.abs(index - active);
+        int groupIndex = groupMainIndex(index);
+        boolean hasBuffered = amllBufferedGroups.contains(groupIndex);
         boolean playing = currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack);
-        if (dist == 0) return new LyricPresentation(0.85f, playing ? 1f : 1.012f);
-        float opacity = playing ? 0.20f : (dist <= 2 ? 0.40f : 0.30f);
-        float scale = playing ? 0.97f : 1f;
+        boolean isBG = lyricLines.get(index).isBG();
+        boolean nonDynamic = isNonDynamicLyrics();
+
+        if (isBG) {
+            return new LyricPresentation(hasBuffered ? 0.4f : 0.0001f, hasBuffered ? 1f : 0.8f);
+        }
+
+        float opacity = hasBuffered ? 0.85f : (nonDynamic ? 0.20f : 1f);
+        float scale = (!hasBuffered && playing) ? 0.97f : 1f;
         return new LyricPresentation(opacity, scale);
+    }
+
+    private boolean isNonDynamicLyrics() {
+        for (LyricLine line : lyricLines) {
+            if (line.words() != null && line.words().size() > 1) return false;
+        }
+        return true;
+    }
+
+    private boolean isActiveLine(int index, int active) {
+        if (index == active) return true;
+        if (active >= 0 && active < lyricLines.size() && index >= 0 && index < lyricLines.size()) {
+            return Math.abs(lyricLines.get(index).startTime() - lyricLines.get(active).startTime()) < 0.001f;
+        }
+        return false;
     }
 
     private void startLyricViewAnimation(long now) {
@@ -1658,7 +2012,7 @@ public class Musicpage extends Screen {
         }
         int clickedLyric = lyricLineAt(mx, my);
         if (clickedLyric >= 0 && clickedLyric < lyricLines.size()) {
-            playDisplayedTrackFrom(lyricLines.get(clickedLyric).time());
+            playDisplayedTrackFrom(lyricLines.get(clickedLyric).startTime());
             lyricSnapOnNextRender = true;
             controlsLayerDirty = true;
             return true;
@@ -1821,6 +2175,7 @@ public class Musicpage extends Screen {
     private void resetPlaybackUiState() {
         lastRenderedSecond = -1;
         lastActiveLyric = -1;
+        resetAMLLTimeline();
         lyricSnapOnNextRender = true;
         controlsLayerDirty = true;
         lyricsLayerDirty = true;
@@ -1830,7 +2185,6 @@ public class Musicpage extends Screen {
         return mx >= x && mx <= x + w && my >= y && my <= y + h;
     }
 
-    @SuppressWarnings("deprecation")
     private void rebuildCover(MusicLoader.MusicTrack track) {
         if (coverImage != null) {
             coverImage.close();
@@ -1843,13 +2197,13 @@ public class Musicpage extends Screen {
             return;
         }
         try {
-            coverImage = Image.makeFromEncoded(coverBytes);
+            coverImage = Image.makeDeferredFromEncodedBytes(coverBytes);
             derivePaletteFromCover(coverBytes);
             rebuildFluidBackground(coverBytes, track);
         } catch (Exception e) {
             derivePaletteFromText(track.title() + track.artist());
             rebuildFluidBackground(null, track);
-            SkijaTestClient.LOGGER.warn("[Musicpage] Failed to decode cover art for {}", track.title(), e);
+            SkijaTestClient.LOGGER.info("[Musicpage] Failed to decode cover art for {}", track.title(), e);
         }
     }
 
@@ -1886,7 +2240,7 @@ public class Musicpage extends Screen {
             paletteC = saturate(darken(avg, 0.16f), 1.10f);
             paletteDark = darken(avg, 0.58f);
         } catch (Exception e) {
-            SkijaTestClient.LOGGER.warn("[Musicpage] Failed to derive cover palette", e);
+            SkijaTestClient.LOGGER.info("[Musicpage] Failed to derive cover palette", e);
         }
     }
 
@@ -1904,6 +2258,7 @@ public class Musicpage extends Screen {
 
     private void refreshTrackCache() {
         cachedTrack = null;
+        resetAMLLTimeline();
         clearLyricCache();
         if (coverImage != null) {
             coverImage.close();
@@ -1911,7 +2266,344 @@ public class Musicpage extends Screen {
         }
     }
 
+    private static float parseTTMLTime(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) return 0f;
+        String[] parts = timeStr.split(":");
+        try {
+            if (parts.length == 3) {
+                return Float.parseFloat(parts[0]) * 3600 + Float.parseFloat(parts[1]) * 60 + Float.parseFloat(parts[2]);
+            } else if (parts.length == 2) {
+                return Float.parseFloat(parts[0]) * 60 + Float.parseFloat(parts[1]);
+            } else {
+                return Float.parseFloat(parts[0]);
+            }
+        } catch (Exception e) {
+            return 0f;
+        }
+    }
+
+    private java.util.List<RubyText> parseRubyTexts(org.w3c.dom.Element wordEl) {
+        ArrayList<RubyText> result = new ArrayList<>();
+        String rubyAttr = wordEl.getAttribute("tts:ruby");
+        if (rubyAttr.isEmpty()) rubyAttr = wordEl.getAttributeNS("http://www.w3.org/ns/ttml#styling", "ruby");
+        if (!"container".equals(rubyAttr)) return result;
+        org.w3c.dom.NodeList descendants = wordEl.getElementsByTagName("span");
+        for (int i = 0; i < descendants.getLength(); i++) {
+            org.w3c.dom.Element el = (org.w3c.dom.Element) descendants.item(i);
+            String role = el.getAttribute("tts:ruby");
+            if (role.isEmpty()) role = el.getAttributeNS("http://www.w3.org/ns/ttml#styling", "ruby");
+            if (!"text".equals(role)) continue;
+            float begin = parseTTMLTime(el.getAttribute("begin"));
+            float end = parseTTMLTime(el.getAttribute("end"));
+            String text = el.getTextContent();
+            if (text != null && !text.isBlank()) result.add(new RubyText(begin, end, text));
+        }
+        return result;
+    }
+
+    private String parseRubyBaseText(org.w3c.dom.Element wordEl) {
+        org.w3c.dom.NodeList descendants = wordEl.getElementsByTagName("span");
+        for (int i = 0; i < descendants.getLength(); i++) {
+            org.w3c.dom.Element el = (org.w3c.dom.Element) descendants.item(i);
+            String role = el.getAttribute("tts:ruby");
+            if (role.isEmpty()) role = el.getAttributeNS("http://www.w3.org/ns/ttml#styling", "ruby");
+            if ("base".equals(role)) return el.getTextContent();
+        }
+        return wordEl.getTextContent();
+    }
+
+    private java.util.List<LyricWord> attachRomanWords(java.util.List<LyricWord> words, java.util.List<LyricWord> romanWords) {
+        if (words == null || words.isEmpty() || romanWords == null || romanWords.isEmpty()) return words;
+        ArrayList<LyricWord> result = new ArrayList<>(words.size());
+        for (int i = 0; i < words.size(); i++) {
+            LyricWord word = words.get(i);
+            LyricWord best = null;
+            float bestOverlap = 0f;
+            for (LyricWord roman : romanWords) {
+                float overlap = Math.min(word.endTime(), roman.endTime()) - Math.max(word.startTime(), roman.startTime());
+                if (overlap > bestOverlap) {
+                    bestOverlap = overlap;
+                    best = roman;
+                }
+            }
+            if (best == null && i < romanWords.size()) best = romanWords.get(i);
+            result.add(word.withRomanWord(best == null ? null : best.word()));
+        }
+        return result;
+    }
+
+    private java.util.List<LyricWord> splitAMLLWords(java.util.List<LyricWord> words) {
+        if (words == null || words.isEmpty()) return words;
+        ArrayList<LyricWord> result = new ArrayList<>();
+        ArrayList<LyricWord> currentGroup = new ArrayList<>();
+
+        java.util.function.Consumer<LyricWord> flushAtom = atom -> {
+            boolean isSpace = atom.word() == null || atom.word().trim().isEmpty();
+            boolean isCjk = atom.word() != null && containsCjk(atom.word());
+            boolean mergeable = !isSpace && !isCjk;
+            if (mergeable) {
+                currentGroup.add(atom);
+            } else {
+                if (!currentGroup.isEmpty()) {
+                    result.add(mergeAMLLWordGroup(currentGroup));
+                    currentGroup.clear();
+                }
+                result.add(atom);
+            }
+        };
+
+        for (LyricWord word : words) {
+            String text = word.word() == null ? "" : word.word();
+            if (word.ruby() != null && !word.ruby().isEmpty()) {
+                flushAtom.accept(word);
+                continue;
+            }
+            if (text.trim().isEmpty()) {
+                flushAtom.accept(word);
+                continue;
+            }
+            java.util.regex.Matcher matcher = Pattern.compile("\\S+|\\s+").matcher(text);
+            int nonSpaceUnits = Math.max(1, text.replaceAll("\\s", "").length());
+            float timePerUnit = (word.endTime() - word.startTime()) / nonSpaceUnits;
+            int currentOffset = 0;
+            while (matcher.find()) {
+                String part = matcher.group();
+                if (part.trim().isEmpty()) {
+                    float t = word.startTime() + currentOffset * timePerUnit;
+                    flushAtom.accept(new LyricWord(t, t, part, word.romanWord(), word.ruby()));
+                    continue;
+                }
+                if (containsCjk(part) && part.codePointCount(0, part.length()) > 1) {
+                    for (int offset = 0; offset < part.length();) {
+                        int cp = part.codePointAt(offset);
+                        int len = Character.charCount(cp);
+                        String unit = part.substring(offset, offset + len);
+                        float t = word.startTime() + currentOffset * timePerUnit;
+                        flushAtom.accept(new LyricWord(t, t + timePerUnit, unit, word.romanWord(), word.ruby()));
+                        currentOffset += 1;
+                        offset += len;
+                    }
+                } else {
+                    int partUnits = Math.max(1, part.replaceAll("\\s", "").length());
+                    float t = word.startTime() + currentOffset * timePerUnit;
+                    flushAtom.accept(new LyricWord(t, t + partUnits * timePerUnit, part, word.romanWord(), word.ruby()));
+                    currentOffset += partUnits;
+                }
+            }
+        }
+        if (!currentGroup.isEmpty()) result.add(mergeAMLLWordGroup(currentGroup));
+        return result;
+    }
+
+    private LyricWord mergeAMLLWordGroup(java.util.List<LyricWord> words) {
+        if (words.size() == 1) return words.get(0);
+        float start = Float.POSITIVE_INFINITY;
+        float end = Float.NEGATIVE_INFINITY;
+        StringBuilder text = new StringBuilder();
+        StringBuilder roman = new StringBuilder();
+        ArrayList<RubyText> ruby = new ArrayList<>();
+        for (LyricWord word : words) {
+            start = Math.min(start, word.startTime());
+            end = Math.max(end, word.endTime());
+            text.append(word.word() == null ? "" : word.word());
+            if (word.romanWord() != null) roman.append(word.romanWord());
+            if (word.ruby() != null) ruby.addAll(word.ruby());
+        }
+        return new LyricWord(start, end, text.toString(), roman.toString().isBlank() ? null : roman.toString(), ruby);
+    }
+
+    private List<LyricLine> parseTTML(String xmlStr, String title, String artist) {
+        List<LyricLine> result = new ArrayList<>();
+        try {
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(new java.io.ByteArrayInputStream(xmlStr.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+            java.util.Map<String, String> agentTypes = new java.util.HashMap<>();
+            org.w3c.dom.NodeList agentNodes = doc.getElementsByTagNameNS("http://www.w3.org/ns/ttml#metadata", "agent");
+            if (agentNodes.getLength() == 0) {
+                agentNodes = doc.getElementsByTagName("ttm:agent");
+            }
+            for (int i = 0; i < agentNodes.getLength(); i++) {
+                org.w3c.dom.Element agentEl = (org.w3c.dom.Element) agentNodes.item(i);
+                String id = agentEl.getAttribute("xml:id");
+                String type = agentEl.getAttribute("type");
+                if (!id.isEmpty() && !type.isEmpty()) {
+                    agentTypes.put(id, type);
+                }
+            }
+
+            java.util.Map<String, String> translations = new java.util.HashMap<>();
+            org.w3c.dom.NodeList transNodes = doc.getElementsByTagName("translation");
+            if (transNodes.getLength() > 0) {
+                org.w3c.dom.Element transEl = (org.w3c.dom.Element) transNodes.item(0);
+                org.w3c.dom.NodeList textNodes = transEl.getElementsByTagName("text");
+                for (int i = 0; i < textNodes.getLength(); i++) {
+                    org.w3c.dom.Element textEl = (org.w3c.dom.Element) textNodes.item(i);
+                    String forKey = textEl.getAttribute("for");
+                    String text = textEl.getTextContent();
+                    if (!forKey.isEmpty() && text != null && !text.isEmpty()) {
+                        translations.put(forKey, text);
+                    }
+                }
+            }
+
+            org.w3c.dom.NodeList pNodes = doc.getElementsByTagName("p");
+            String lastPersonAgentId = null;
+            boolean lastPersonIsDuet = false;
+
+            for (int i = 0; i < pNodes.getLength(); i++) {
+                org.w3c.dom.Element pEl = (org.w3c.dom.Element) pNodes.item(i);
+                float lineBegin = parseTTMLTime(pEl.getAttribute("begin"));
+                float lineEnd = parseTTMLTime(pEl.getAttribute("end"));
+                String lineKey = pEl.getAttribute("itunes:key");
+                if (lineKey.isEmpty()) lineKey = pEl.getAttributeNS("http://itunes.apple.com/lyric-ttml-extensions", "key");
+                String agentId = pEl.getAttribute("ttm:agent");
+                if (agentId.isEmpty()) agentId = pEl.getAttributeNS("http://www.w3.org/ns/ttml#metadata", "agent");
+
+                String agentType = agentTypes.getOrDefault(agentId, "person");
+                boolean isDuet = false;
+                if ("group".equals(agentType)) {
+                    isDuet = false;
+                } else {
+                    if (lastPersonAgentId == null) {
+                        isDuet = "other".equals(agentType);
+                        lastPersonAgentId = agentId;
+                        lastPersonIsDuet = isDuet;
+                    } else if (lastPersonAgentId.equals(agentId)) {
+                        isDuet = lastPersonIsDuet;
+                    } else {
+                        isDuet = !lastPersonIsDuet;
+                        lastPersonAgentId = agentId;
+                        lastPersonIsDuet = isDuet;
+                    }
+                }
+
+                java.util.List<LyricWord> mainWords = new ArrayList<>();
+                java.util.List<LyricWord> bgWords = new ArrayList<>();
+                java.util.List<LyricWord> romanWords = new ArrayList<>();
+                StringBuilder mainTextBuilder = new StringBuilder();
+                StringBuilder bgTextBuilder = new StringBuilder();
+                StringBuilder romanTextBuilder = new StringBuilder();
+
+                org.w3c.dom.NodeList childNodes = pEl.getChildNodes();
+                for (int j = 0; j < childNodes.getLength(); j++) {
+                    org.w3c.dom.Node child = childNodes.item(j);
+                    if (child.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE && "span".equals(child.getLocalName())) {
+                        org.w3c.dom.Element spanEl = (org.w3c.dom.Element) child;
+                        String role = spanEl.getAttribute("ttm:role");
+                        if (role.isEmpty()) role = spanEl.getAttributeNS("http://www.w3.org/ns/ttml#metadata", "role");
+
+                        if ("x-roman".equals(role)) {
+                            org.w3c.dom.NodeList romanChildNodes = spanEl.getChildNodes();
+                            for (int k = 0; k < romanChildNodes.getLength(); k++) {
+                                org.w3c.dom.Node romanChild = romanChildNodes.item(k);
+                                if (romanChild.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE && "span".equals(romanChild.getLocalName())) {
+                                    org.w3c.dom.Element romanSpanEl = (org.w3c.dom.Element) romanChild;
+                                    float rBegin = parseTTMLTime(romanSpanEl.getAttribute("begin"));
+                                    float rEnd = parseTTMLTime(romanSpanEl.getAttribute("end"));
+                                    String text = romanSpanEl.getTextContent();
+                                    romanWords.add(new LyricWord(rBegin, rEnd, text));
+                                    romanTextBuilder.append(text);
+                                } else if (romanChild.getNodeType() == org.w3c.dom.Node.TEXT_NODE) {
+                                    romanTextBuilder.append(romanChild.getTextContent());
+                                }
+                            }
+                            if (romanChildNodes.getLength() == 0) romanTextBuilder.append(spanEl.getTextContent());
+                            continue;
+                        }
+
+                        if ("x-bg".equals(role)) {
+                            org.w3c.dom.NodeList bgChildNodes = spanEl.getChildNodes();
+                            for (int k = 0; k < bgChildNodes.getLength(); k++) {
+                                org.w3c.dom.Node bgChild = bgChildNodes.item(k);
+                                if (bgChild.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE && "span".equals(bgChild.getLocalName())) {
+                                    org.w3c.dom.Element bgSpanEl = (org.w3c.dom.Element) bgChild;
+                                    float wBegin = parseTTMLTime(bgSpanEl.getAttribute("begin"));
+                                    float wEnd = parseTTMLTime(bgSpanEl.getAttribute("end"));
+                                    String text;
+                                    java.util.List<RubyText> ruby = parseRubyTexts(bgSpanEl);
+                                    if (!ruby.isEmpty()) text = parseRubyBaseText(bgSpanEl);
+                                    else text = bgSpanEl.getTextContent();
+                                    bgWords.add(new LyricWord(wBegin, wEnd, text, null, ruby));
+                                    bgTextBuilder.append(text);
+                                } else if (bgChild.getNodeType() == org.w3c.dom.Node.TEXT_NODE) {
+                                    bgTextBuilder.append(bgChild.getTextContent());
+                                }
+                            }
+                        } else {
+                            float wBegin = parseTTMLTime(spanEl.getAttribute("begin"));
+                            float wEnd = parseTTMLTime(spanEl.getAttribute("end"));
+                            String text;
+                            java.util.List<RubyText> ruby = parseRubyTexts(spanEl);
+                            if (!ruby.isEmpty()) text = parseRubyBaseText(spanEl);
+                            else text = spanEl.getTextContent();
+                            mainWords.add(new LyricWord(wBegin, wEnd, text, null, ruby));
+                            mainTextBuilder.append(text);
+                        }
+                    } else if (child.getNodeType() == org.w3c.dom.Node.TEXT_NODE) {
+                        mainTextBuilder.append(child.getTextContent());
+                    }
+                }
+
+                String mainText = mainTextBuilder.toString().trim();
+                String bgText = bgTextBuilder.toString().trim();
+                String romanText = romanTextBuilder.toString().trim();
+                String translation = translations.get(lineKey);
+
+                if (!mainText.isEmpty() || !mainWords.isEmpty()) {
+                    if (mainWords.isEmpty()) {
+                        mainWords.add(new LyricWord(lineBegin, lineEnd, mainText));
+                    }
+                    result.add(new LyricLine(lineBegin, lineEnd, mainText, false, attachRomanWords(splitAMLLWords(mainWords), splitAMLLWords(romanWords)), translation, romanText, isDuet));
+                }
+
+                if (!bgText.isEmpty() || !bgWords.isEmpty()) {
+                    if (bgWords.isEmpty()) {
+                        bgWords.add(new LyricWord(lineBegin, lineEnd, bgText));
+                    }
+                    bgText = bgText.replaceAll("^[（(]+|[)）]+$", "").trim();
+                    bgText = "（" + bgText + "）";
+                    result.add(new LyricLine(lineBegin, lineEnd, bgText, true, splitAMLLWords(bgWords), null, isDuet));
+                }
+            }
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.info("[Musicpage] Failed to parse TTML lyrics", e);
+        }
+
+        if (result.isEmpty()) {
+            result.add(new LyricLine(0f, 4f, title, false));
+            result.add(new LyricLine(4f, 8f, artist, false));
+            result.add(new LyricLine(8f, 12f, "The loaded TTML has no valid lines", false));
+        }
+
+        result.sort(java.util.Comparator.comparingDouble(LyricLine::startTime));
+
+        for (int i = 0; i < result.size() - 1; i++) {
+            LyricLine curr = result.get(i);
+            LyricLine next = result.get(i + 1);
+            if (curr.endTime() <= 0.001f) {
+                result.set(i, new LyricLine(curr.startTime(), next.startTime(), curr.text(), curr.isBG(), curr.words(), curr.translation(), curr.isDuet()));
+            }
+        }
+        if (!result.isEmpty()) {
+            int lastIndex = result.size() - 1;
+            LyricLine last = result.get(lastIndex);
+            if (last.endTime() <= 0.001f) {
+                result.set(lastIndex, new LyricLine(last.startTime(), last.startTime() + 10f, last.text(), last.isBG(), last.words(), last.translation(), last.isDuet()));
+            }
+        }
+
+        return result;
+    }
+
+
+
     private List<LyricLine> parseLyrics(String rawLyrics, String title, String artist) {
+        if (rawLyrics != null && rawLyrics.trim().startsWith("<tt")) {
+            return parseTTML(rawLyrics, title, artist);
+        }
         ArrayList<LyricLine> result = new ArrayList<>();
         if (rawLyrics != null && !rawLyrics.isBlank()) {
             String[] lines = rawLyrics.replace("\r", "").split("\n");
@@ -1922,30 +2614,181 @@ public class Musicpage extends Screen {
                     int min = parseInt(m.group(1));
                     int sec = parseInt(m.group(2));
                     int ms = parseMillis(m.group(3));
-                    String text = m.group(4).isBlank() ? "♪" : m.group(4).trim();
-                    result.add(new LyricLine(min * 60f + sec + ms / 1000f, text));
+                    float time = min * 60f + sec + ms / 1000f;
+                    String text = m.group(4).trim();
+                    Matcher inlineBg = Pattern.compile("^(.*?)\\s*[(（](.+)[)）]$").matcher(text);
+                    if (inlineBg.matches() && !inlineBg.group(1).isBlank()) {
+                        String mainText = inlineBg.group(1).trim();
+                        String bgText = "（" + inlineBg.group(2).trim() + "）";
+                        result.add(new LyricLine(time, 0f, mainText, false));
+                        result.add(new LyricLine(time, 0f, bgText, true));
+                    } else {
+                        boolean isBG = text.matches("^[(（].+[)）]$");
+                        result.add(new LyricLine(time, 0f, text, isBG));
+                    }
                 } else if (!line.isBlank()) {
-                    result.add(new LyricLine(plainIndex++ * 4.0f, line.trim()));
+                    String text = line.trim();
+                    float time = plainIndex++ * 4.0f;
+                    Matcher inlineBg = Pattern.compile("^(.*?)\\s*[(（](.+)[)）]$").matcher(text);
+                    if (inlineBg.matches() && !inlineBg.group(1).isBlank()) {
+                        String mainText = inlineBg.group(1).trim();
+                        String bgText = "（" + inlineBg.group(2).trim() + "）";
+                        result.add(new LyricLine(time, 0f, mainText, false));
+                        result.add(new LyricLine(time, 0f, bgText, true));
+                    } else {
+                        boolean isBG = text.matches("^[(（].+[)）]$");
+                        result.add(new LyricLine(time, 0f, text, isBG));
+                    }
                 }
             }
         }
         if (result.isEmpty()) {
-            result.add(new LyricLine(0, title));
-            result.add(new LyricLine(4, artist));
-            result.add(new LyricLine(8, "把带歌词标签的 MP3 / FLAC 放到 lazychara/music"));
-            result.add(new LyricLine(12, "之后接入真实播放进度即可同步歌词"));
+            result.add(new LyricLine(0f, 4f, title, false));
+            result.add(new LyricLine(4f, 8f, artist, false));
+            result.add(new LyricLine(8f, 12f, "把带歌词标签的 MP3 / FLAC 放到 lazychara/music", false));
+            result.add(new LyricLine(12f, 16f, "之后接入真实播放进度即可同步歌词", false));
         }
-        result.sort(java.util.Comparator.comparingDouble(LyricLine::time));
+        result.sort(java.util.Comparator.comparingDouble(LyricLine::startTime));
+
+        int consecutiveBgCount = 0;
+        for (int i = 0; i < result.size(); i++) {
+            LyricLine line = result.get(i);
+            if (line.isBG()) {
+                consecutiveBgCount++;
+                if (consecutiveBgCount > 1) {
+                    result.set(i, new LyricLine(line.startTime(), line.endTime(), line.text(), false));
+                }
+            } else {
+                consecutiveBgCount = 0;
+            }
+        }
+
+        for (int i = result.size() - 1; i >= 0; i--) {
+            LyricLine line = result.get(i);
+            if (line.isBG()) continue;
+            if (i + 1 < result.size()) {
+                LyricLine nextLine = result.get(i + 1);
+                if (nextLine.isBG()) {
+                    float minStart = Math.min(line.startTime(), nextLine.startTime());
+                    result.set(i, new LyricLine(minStart, line.endTime(), line.text(), line.isBG()));
+                    result.set(i + 1, new LyricLine(minStart, nextLine.endTime(), nextLine.text(), nextLine.isBG()));
+                }
+            }
+        }
+
+        for (int i = 0; i < result.size() - 1; i++) {
+            LyricLine curr = result.get(i);
+            LyricLine next = result.get(i + 1);
+            if (curr.endTime() <= 0.001f) {
+                result.set(i, new LyricLine(curr.startTime(), next.startTime(), curr.text(), curr.isBG()));
+            }
+        }
+
+        if (!result.isEmpty()) {
+            int lastIndex = result.size() - 1;
+            LyricLine last = result.get(lastIndex);
+            if (last.endTime() <= 0.001f) {
+                result.set(lastIndex, new LyricLine(last.startTime(), last.startTime() + 10f, last.text(), last.isBG()));
+            }
+        }
+
+        result.removeIf(line -> line.text().isBlank());
+
         return result;
     }
 
     private int activeLyricIndex(float elapsed) {
-        int active = 0;
-        for (int i = 0; i < lyricLines.size(); i++) {
-            if (elapsed + 0.05f >= lyricLines.get(i).time()) active = i;
-            else break;
+        updateAMLLTimeline(elapsed);
+        return Math.max(0, Math.min(amllScrollToIndex, Math.max(0, lyricLines.size() - 1)));
+    }
+
+    private void resetAMLLTimeline() {
+        amllHotGroups.clear();
+        amllBufferedGroups.clear();
+        amllScrollToIndex = 0;
+        amllLastTimelineSeconds = -1f;
+    }
+
+    private void updateAMLLTimeline(float elapsed) {
+        if (lyricLines.isEmpty()) {
+            resetAMLLTimeline();
+            return;
         }
-        return active;
+        if (Math.abs(elapsed - amllLastTimelineSeconds) < 0.001f) return;
+        amllLastTimelineSeconds = elapsed;
+
+        Set<Integer> nextHotGroups = new HashSet<>(amllHotGroups);
+        Set<Integer> addedIds = new HashSet<>();
+        Set<Integer> removedHotIds = new HashSet<>();
+        Set<Integer> removedBufferedIds = new HashSet<>();
+
+        for (Integer hotId : new HashSet<>(amllHotGroups)) {
+            if (!isGroupActiveAt(hotId, elapsed)) {
+                nextHotGroups.remove(hotId);
+                removedHotIds.add(hotId);
+            }
+        }
+
+        for (int i = 0; i < lyricLines.size(); i++) {
+            if (isAttachedBgLine(i)) continue;
+            if (isGroupActiveAt(i, elapsed) && !nextHotGroups.contains(i)) {
+                nextHotGroups.add(i);
+                addedIds.add(i);
+            }
+        }
+
+        for (Integer id : new HashSet<>(amllBufferedGroups)) {
+            if (!nextHotGroups.contains(id)) removedBufferedIds.add(id);
+        }
+
+        amllHotGroups.clear();
+        amllHotGroups.addAll(nextHotGroups);
+
+        if (addedIds.size() > 0) {
+            amllBufferedGroups.addAll(addedIds);
+            for (Integer id : removedBufferedIds) amllBufferedGroups.remove(id);
+            if (!amllBufferedGroups.isEmpty()) amllScrollToIndex = minSet(amllBufferedGroups);
+        } else if (!removedBufferedIds.isEmpty() && removedBufferedIds.containsAll(amllBufferedGroups) && amllBufferedGroups.containsAll(removedBufferedIds)) {
+            for (Integer id : removedBufferedIds) {
+                if (!amllHotGroups.contains(id)) amllBufferedGroups.remove(id);
+            }
+        }
+
+        if (amllBufferedGroups.isEmpty()) {
+            int lastMain = lastMainLineIndex();
+            if (lastMain >= 0 && elapsed >= lyricLines.get(lastMain).endTime()) {
+                amllScrollToIndex = lastMain;
+            } else if (amllScrollToIndex < 0 || amllScrollToIndex >= lyricLines.size()) {
+                amllScrollToIndex = firstGroupAtOrAfter(elapsed);
+            }
+        }
+    }
+
+    private boolean isGroupActiveAt(int mainIndex, float elapsed) {
+        if (mainIndex < 0 || mainIndex >= lyricLines.size()) return false;
+        LyricLine main = lyricLines.get(mainIndex);
+        return main.startTime() <= elapsed && main.endTime() > elapsed;
+    }
+
+    private int minSet(Set<Integer> values) {
+        int min = Integer.MAX_VALUE;
+        for (Integer value : values) if (value != null && value < min) min = value;
+        return min == Integer.MAX_VALUE ? 0 : min;
+    }
+
+    private int lastMainLineIndex() {
+        for (int i = lyricLines.size() - 1; i >= 0; i--) {
+            if (!isAttachedBgLine(i)) return i;
+        }
+        return -1;
+    }
+
+    private int firstGroupAtOrAfter(float elapsed) {
+        for (int i = 0; i < lyricLines.size(); i++) {
+            if (!isAttachedBgLine(i) && lyricLines.get(i).startTime() >= elapsed) return i;
+        }
+        int lastMain = lastMainLineIndex();
+        return lastMain >= 0 ? lastMain : 0;
     }
 
     private float elapsedSeconds(MusicLoader.MusicTrack track, long now) {
@@ -2075,6 +2918,340 @@ public class Musicpage extends Screen {
         }
     }
 
+
+
+    private void updateActiveDynamicRenderer(CachedLyricLine cached, float currentSeconds, float s) {
+        if (cached.whiteImage == null) return;
+        SkijaRenderer renderer = cached.activeRenderer;
+        renderer.clear(0x00000000);
+        Canvas c = renderer.canvas();
+        c.save();
+        float drawScale = Math.max(1f, guiScale);
+        c.scale(drawScale, drawScale);
+        float w = cached.activeW;
+        float h = cached.activeH;
+        WordRange activeRange = amllCurrentWordRange(cached, currentSeconds);
+        float contentH = Math.max(1f, h - cached.activePad * 2f);
+        float fade = Math.max(0.0001f, (activeRange != null ? activeRange.h() : contentH) * 0.5f);
+        float gradientX = activeRange == null ? cached.activeW : amllDynamicMaskX(cached, currentSeconds, fade);
+        try (Paint basePaint = new Paint()) {
+            basePaint.setAntiAlias(true);
+            basePaint.setColor(0xB8FFFFFF);
+            c.drawImageRect(cached.activeImage, Rect.makeXYWH(0, 0, w, h), basePaint);
+
+            c.saveLayer(null, null);
+            try (Paint maskPaint = new Paint()) {
+                maskPaint.setAntiAlias(true);
+                maskPaint.setColor(0xFFFFFFFF);
+                c.drawImageRect(cached.whiteImage, Rect.makeXYWH(0, 0, w, h), maskPaint);
+            }
+            try (Paint gradientPaint = new Paint(); io.github.humbleui.skija.Shader shader = io.github.humbleui.skija.Shader.makeLinearGradient(
+                    gradientX - fade, 0f, gradientX + fade, 0f,
+                    new int[]{withAlpha(WHITE, cached.currentBrightAlpha), withAlpha(WHITE, cached.currentDarkAlpha)})) {
+                gradientPaint.setAntiAlias(true);
+                gradientPaint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                if (activeRange == null) {
+                    gradientPaint.setColor(withAlpha(WHITE, cached.currentBrightAlpha));
+                    c.drawRect(Rect.makeXYWH(0, 0, w, h), gradientPaint);
+                } else {
+                    drawAMLLDynamicMaskSegments(c, cached, activeRange, currentSeconds, fade, w);
+                    drawAMLLRomanMaskSegments(c, cached, activeRange, currentSeconds, w);
+                }
+            }
+            if (activeRange != null && activeRange.emphasize()) {
+                drawAMLLWordEmphasis(c, cached, activeRange, currentSeconds);
+            }
+            c.restore();
+        }
+        c.restore();
+        renderer.upload();
+    }
+
+    private void drawAMLLDynamicMaskSegments(Canvas c, CachedLyricLine cached, WordRange activeRange, float currentSeconds, float fade, float w) {
+        if (cached.dynamicWordRanges == null || cached.dynamicWordRanges.isEmpty()) return;
+        for (WordRange range : cached.dynamicWordRanges) {
+            if (currentSeconds < range.startTime()) break;
+            float x = Math.max(0f, range.startX() - fade);
+            float rectW = Math.max(1f, range.endX() - range.startX() + fade * 2f);
+            if (currentSeconds > range.endTime()) {
+                try (Paint paint = new Paint()) {
+                    paint.setAntiAlias(true);
+                    paint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                    paint.setColor(withAlpha(WHITE, cached.currentBrightAlpha));
+                    c.drawRect(Rect.makeXYWH(x, range.y(), rectW, range.h()), paint);
+                }
+            } else {
+                float gradientX = amllDynamicMaskX(cached, currentSeconds, fade);
+                try (Paint paint = new Paint(); io.github.humbleui.skija.Shader shader = io.github.humbleui.skija.Shader.makeLinearGradient(
+                        gradientX - fade, 0f, gradientX + fade, 0f,
+                        new int[]{withAlpha(WHITE, cached.currentBrightAlpha), withAlpha(WHITE, cached.currentDarkAlpha)})) {
+                    paint.setAntiAlias(true);
+                    paint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                    paint.setShader(shader);
+                    c.drawRect(Rect.makeXYWH(x, range.y(), rectW, range.h()), paint);
+                }
+                break;
+            }
+        }
+    }
+
+    private void drawAMLLRomanMaskSegments(Canvas c, CachedLyricLine cached, WordRange activeRange, float currentSeconds, float w) {
+        if (activeRange.romanH() <= 0.5f || cached.dynamicWordRanges == null || cached.dynamicWordRanges.isEmpty()) return;
+        boolean hasWordBox = activeRange.romanWordH() > 0.5f;
+        if (!hasWordBox) {
+            float romanFade = Math.max(0.0001f, activeRange.romanH() * 0.5f);
+            float romanX = amllRomanMaskX(cached, activeRange, currentSeconds, romanFade);
+            try (Paint paint = new Paint(); io.github.humbleui.skija.Shader shader = io.github.humbleui.skija.Shader.makeLinearGradient(
+                    romanX - romanFade, 0f, romanX + romanFade, 0f,
+                    new int[]{withAlpha(WHITE, cached.currentBrightAlpha), withAlpha(WHITE, cached.currentDarkAlpha)})) {
+                paint.setAntiAlias(true);
+                paint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                paint.setShader(shader);
+                c.drawRect(Rect.makeXYWH(0, activeRange.romanY(), w, activeRange.romanH()), paint);
+            }
+            return;
+        }
+        for (WordRange range : cached.dynamicWordRanges) {
+            if (range.romanWordH() <= 0.5f || range.romanWordEndX() <= range.romanWordStartX()) continue;
+            if (currentSeconds < range.startTime()) break;
+            float romanFade = Math.max(0.0001f, range.romanWordH() * 0.5f);
+            float x = Math.max(0f, range.romanWordStartX() - romanFade);
+            float rectW = Math.max(1f, range.romanWordEndX() - range.romanWordStartX() + romanFade * 2f);
+            if (currentSeconds > range.endTime()) {
+                try (Paint paint = new Paint()) {
+                    paint.setAntiAlias(true);
+                    paint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                    paint.setColor(withAlpha(WHITE, cached.currentBrightAlpha));
+                    c.drawRect(Rect.makeXYWH(x, range.romanWordY(), rectW, range.romanWordH()), paint);
+                }
+            } else {
+                float romanX = amllRomanMaskX(cached, range, currentSeconds, romanFade);
+                try (Paint paint = new Paint(); io.github.humbleui.skija.Shader shader = io.github.humbleui.skija.Shader.makeLinearGradient(
+                        romanX - romanFade, 0f, romanX + romanFade, 0f,
+                        new int[]{withAlpha(WHITE, cached.currentBrightAlpha), withAlpha(WHITE, cached.currentDarkAlpha)})) {
+                    paint.setAntiAlias(true);
+                    paint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                    paint.setShader(shader);
+                    c.drawRect(Rect.makeXYWH(x, range.romanWordY(), rectW, range.romanWordH()), paint);
+                }
+                break;
+            }
+        }
+    }
+
+    private void drawAMLLWordEmphasis(Canvas c, CachedLyricLine cached, WordRange range, float currentSeconds) {
+        float duration = Math.max(1f, range.endTime() - range.startTime());
+        float du = duration;
+        float amount = du / 2f;
+        amount = amount > 1f ? (float) Math.sqrt(amount) : amount * amount * amount;
+        float blur = du / 3f;
+        blur = blur > 1f ? (float) Math.sqrt(blur) : blur * blur * blur;
+        amount *= 0.6f;
+        blur *= 0.5f;
+        if (range.wordIndex() == range.wordCount() - 1) {
+            amount *= 1.6f;
+            blur *= 1.5f;
+            du *= 1.2f;
+        }
+        amount = Math.min(1.2f, amount);
+        blur = Math.min(0.8f, blur);
+        int visualCharCount = Math.max(1, range.emphasisSlices() == null || range.emphasisSlices().isEmpty() ? emphasisCharacterCount(range.wordText()) : range.emphasisSlices().size());
+        int anchorCharCount = Math.max(1, emphasisAnchorCharacterCount(range));
+        float animateDu = Math.max(1f, du);
+        for (int i = 0; i < visualCharCount; i++) {
+            EmphasisSlice slice = emphasisSliceAt(range, i, visualCharCount);
+            float wordDe = duration / 2.5f / anchorCharCount * i;
+            float glowT = clamp((currentSeconds - range.startTime() - wordDe) / animateDu, 0f, 1f);
+            float floatT = clamp((currentSeconds - range.startTime() - wordDe + 0.4f) / (animateDu * 1.4f), 0f, 1f);
+            float transX = empEasing(glowT);
+            float glowLevel = transX * blur;
+            float floatY = (float) Math.sin(floatT * Math.PI);
+            float scale = 1f + transX * 0.10f * amount;
+            float offsetX = -transX * 0.03f * amount * (visualCharCount / 2f - i) * range.baseH();
+            float offsetY = -transX * 0.025f * amount * range.baseH() - floatY * 0.05f * range.baseH();
+            float sliceX = slice.startX() + cached.activePad;
+            float sliceW = Math.max(1f, slice.endX() - slice.startX());
+            float clipX = Math.max(0f, sliceX - range.h() * 0.22f);
+            float clipY = Math.max(0f, range.y() + cached.activePad - range.h() * 0.38f);
+            float clipW = Math.max(1f, sliceW + range.h() * 0.44f);
+            float clipH = Math.max(1f, range.h() * 1.28f);
+            float centerX = sliceX + sliceW * 0.5f;
+            float centerY = range.y() + cached.activePad + range.h() * 0.5f;
+            drawAMLLCharacterEmphasisSlice(c, cached, clipX, clipY, clipW, clipH, centerX, centerY, scale, offsetX, offsetY, glowLevel, blur, transX);
+        }
+    }
+
+    private EmphasisSlice emphasisSliceAt(WordRange range, int index, int count) {
+        if (range.emphasisSlices() != null && index >= 0 && index < range.emphasisSlices().size()) return range.emphasisSlices().get(index);
+        float wordW = Math.max(1f, range.endX() - range.startX());
+        float charW = wordW / Math.max(1, count);
+        float start = range.startX() + index * charW;
+        float end = index == count - 1 ? range.endX() : start + charW;
+        return new EmphasisSlice(start, end);
+    }
+
+    private void drawAMLLCharacterEmphasisSlice(Canvas c, CachedLyricLine cached, float clipX, float clipY, float clipW, float clipH, float centerX, float centerY, float scale, float offsetX, float offsetY, float glowLevel, float blur, float transX) {
+        c.save();
+        c.clipRect(Rect.makeXYWH(clipX, clipY, clipW, clipH));
+        float drawX = centerX - centerX * scale + offsetX;
+        float drawY = centerY - centerY * scale + offsetY;
+        float scaledW = cached.activeW * scale;
+        float scaledH = cached.activeH * scale;
+        try (Paint glowPaint = new Paint(); MaskFilter glow = MaskFilter.makeBlur(FilterBlurMode.NORMAL, Math.max(0.5f, Math.min(0.3f, blur * 0.3f) * 48f), false)) {
+            glowPaint.setAntiAlias(true);
+            glowPaint.setColor(withAlpha(WHITE, clamp(0.10f, glowLevel, 0.65f)));
+            glowPaint.setMaskFilter(glow);
+            c.drawImageRect(cached.whiteImage, Rect.makeXYWH(drawX, drawY, scaledW, scaledH), glowPaint);
+        }
+        try (Paint sharpPaint = new Paint()) {
+            sharpPaint.setAntiAlias(true);
+            sharpPaint.setColor(withAlpha(WHITE, 0.25f + 0.45f * transX));
+            c.drawImageRect(cached.whiteImage, Rect.makeXYWH(drawX, drawY, scaledW, scaledH), sharpPaint);
+        }
+        c.restore();
+    }
+
+    private int emphasisCharacterCount(String text) {
+        if (text == null || text.isBlank()) return 1;
+        int count = 0;
+        for (int i = 0; i < text.length();) {
+            int cp = text.codePointAt(i);
+            if (!Character.isWhitespace(cp)) count++;
+            i += Character.charCount(cp);
+        }
+        return Math.max(1, count);
+    }
+
+    private int emphasisAnchorCharacterCount(WordRange range) {
+        if (range.ruby() != null && !range.ruby().isEmpty()) {
+            int count = 0;
+            for (RubyText ruby : range.ruby()) {
+                count += emphasisCharacterCount(ruby.text());
+            }
+            if (count > 0) return count;
+        }
+        return emphasisCharacterCount(range.wordText());
+    }
+
+    private float empEasing(float x) {
+        x = clamp01(x);
+        return x < 0.5f ? cubicBezier(x / 0.5f, 0.2f, 0.4f, 0.58f, 1.0f) : 1f - cubicBezier((x - 0.5f) / 0.5f, 0.3f, 0.0f, 0.58f, 1.0f);
+    }
+
+    private WordRange amllCurrentWordRange(CachedLyricLine cached, float currentSeconds) {
+        if (cached.dynamicWordRanges == null || cached.dynamicWordRanges.isEmpty()) return null;
+        WordRange first = cached.dynamicWordRanges.get(0);
+        if (currentSeconds <= first.startTime()) return first;
+        WordRange previous = first;
+        for (int i = 0; i < cached.dynamicWordRanges.size(); i++) {
+            WordRange range = cached.dynamicWordRanges.get(i);
+            if (currentSeconds >= range.startTime() && currentSeconds <= range.endTime()) return range;
+            if (currentSeconds < range.startTime()) return previous;
+            previous = range;
+        }
+        return null;
+    }
+
+    private float amllDynamicMaskX(CachedLyricLine cached, float currentSeconds, float fadeWidth) {
+        WordRange range = amllCurrentWordRange(cached, currentSeconds);
+        if (range == null) return cached.activeW;
+        if (currentSeconds < range.startTime()) return range.startX() - fadeWidth;
+        if (currentSeconds > range.endTime()) return range.endX() + fadeWidth;
+        return range.startX() + amllRangeProgressWidth(range, currentSeconds, fadeWidth, false) + fadeWidth * 0.5f;
+    }
+
+    private float amllRomanMaskX(CachedLyricLine cached, WordRange activeRange, float currentSeconds, float fadeWidth) {
+        WordRange range = amllCurrentWordRange(cached, currentSeconds);
+        if (range == null) range = activeRange;
+        if (range.romanWordH() > 0.5f && range.romanWordEndX() > range.romanWordStartX()) {
+            if (currentSeconds < range.startTime()) return range.romanWordStartX() - fadeWidth;
+            if (currentSeconds > range.endTime()) return range.romanWordEndX() + fadeWidth;
+            return range.romanWordStartX() + amllRangeProgressWidth(range, currentSeconds, fadeWidth, true) + fadeWidth * 0.5f;
+        }
+        if (range.romanH() <= 0.5f) return range.romanStartX() - fadeWidth;
+        if (currentSeconds < range.startTime()) return range.romanStartX() - fadeWidth;
+        if (currentSeconds > range.endTime()) return range.romanEndX() + fadeWidth;
+        float progress = clamp((currentSeconds - range.startTime()) / Math.max(0.001f, range.endTime() - range.startTime()), 0f, 1f);
+        return range.romanStartX() + (range.romanEndX() - range.romanStartX()) * progress + fadeWidth * 0.5f;
+    }
+
+    private float amllRangeProgressWidth(WordRange range, float currentSeconds, float fadeWidth, boolean roman) {
+        float wordWidth = roman ? Math.max(0f, range.romanWordEndX() - range.romanWordStartX()) : Math.max(0f, range.endX() - range.startX());
+        if (wordWidth <= 0f) return 0f;
+        if (!roman && range.ruby() != null && !range.ruby().isEmpty()) return amllRubySegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
+        return amllSingleSegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
+    }
+
+    private float amllSingleSegmentProgressWidth(WordRange range, float currentSeconds, float fadeWidth, float wordWidth) {
+        float duration = clampPositive(range.endTime() - range.startTime());
+        if (duration <= 0f) return currentSeconds >= range.endTime() ? amllApplyEdgeFade(range, wordWidth, fadeWidth, 1f, true, true) : 0f;
+        float progress = clamp((currentSeconds - range.startTime()) / duration, 0f, 1f);
+        float width = wordWidth * progress;
+        return amllApplyEdgeFade(range, width, fadeWidth, progress, progress > 0f, progress >= 1f);
+    }
+
+    private float amllRubySegmentProgressWidth(WordRange range, float currentSeconds, float fadeWidth, float wordWidth) {
+        int rubyCharCount = 0;
+        for (RubyText ruby : range.ruby()) {
+            if (ruby.text() != null) rubyCharCount += Math.max(0, ruby.text().length());
+        }
+        if (rubyCharCount <= 0) return amllSingleSegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
+        float widthPerChar = wordWidth / rubyCharCount;
+        float width = 0f;
+        int charIndex = 0;
+        float lastTimeStamp = range.startTime();
+        for (RubyText ruby : range.ruby()) {
+            String text = ruby.text() == null ? "" : ruby.text();
+            int charCount = text.length();
+            if (charCount <= 0) continue;
+            float rubyStartTime = Float.isFinite(ruby.startTime()) ? ruby.startTime() : range.startTime();
+            float rubyEndTime = Float.isFinite(ruby.endTime()) ? ruby.endTime() : range.endTime();
+            float rubyStart = Math.max(rubyStartTime, range.startTime());
+            float rubyEnd = Math.min(Math.max(rubyEndTime, rubyStart), range.endTime());
+            if (currentSeconds < rubyStart) return width;
+            lastTimeStamp = rubyStart;
+            float rubyDuration = clampPositive(rubyEnd - rubyStart);
+            if (rubyDuration <= 0f) {
+                for (int i = 0; i < charCount; i++) {
+                    width += widthPerChar;
+                    width = amllApplyEdgeFade(range, width, fadeWidth, 1f, charIndex == 0, charIndex == rubyCharCount - 1);
+                    charIndex++;
+                }
+                lastTimeStamp = rubyEnd;
+                continue;
+            }
+            float perCharDuration = rubyDuration / charCount;
+            for (int i = 0; i < charCount; i++) {
+                float charStart = rubyStart + perCharDuration * i;
+                float charEnd = charStart + perCharDuration;
+                if (currentSeconds >= charEnd) {
+                    width += widthPerChar;
+                    width = amllApplyEdgeFade(range, width, fadeWidth, 1f, charIndex == 0, charIndex == rubyCharCount - 1);
+                } else if (currentSeconds > charStart) {
+                    float p = clamp((currentSeconds - charStart) / Math.max(0.001f, perCharDuration), 0f, 1f);
+                    width += widthPerChar * p;
+                    width = amllApplyEdgeFade(range, width, fadeWidth, p, charIndex == 0, charIndex == rubyCharCount - 1);
+                    return width;
+                } else {
+                    return width;
+                }
+                lastTimeStamp = charEnd;
+                charIndex++;
+            }
+            if (currentSeconds < rubyEnd) return width;
+            lastTimeStamp = rubyEnd;
+        }
+        if (currentSeconds >= Math.max(range.endTime(), lastTimeStamp)) return width;
+        return width;
+    }
+
+    private float amllApplyEdgeFade(WordRange range, float width, float fadeWidth, float progress, boolean firstSegment, boolean lastSegment) {
+        float result = width;
+        if (range.wordIndex() == 0 && firstSegment && progress > 0f) result += fadeWidth * 1.5f * clamp01(progress);
+        if (range.wordIndex() == range.wordCount() - 1 && lastSegment && progress >= 1f) result += fadeWidth * 0.5f;
+        return result;
+    }
+
     private boolean blitLyricLines(GuiGraphicsExtractor g, float globalAlpha) {
         if (!useLineLyricTextures()) return false;
         SkijaTestScreen.ensureFontLoaded();
@@ -2086,28 +3263,44 @@ public class Musicpage extends Screen {
         if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
             float currentSeconds = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
             InterludeState interlude = computeInterlude(active, currentSeconds);
-            updateInterludeSlotAnimation(interlude.active(), 0f, true);
             updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude);
         }
         if (lyricCache.size() != lyricLines.size() || lyricCache.isEmpty()) return false;
+
+        float currentSecondsDyn = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
+        if (active >= 0 && active < lyricCache.size()) {
+            for (int i = 0; i < lyricCache.size(); i++) {
+                if (!isActiveLine(i, active)) continue;
+                CachedLyricLine activeLine = lyricCache.get(i);
+                if (activeLine.lineRef != null && activeLine.lineRef.isDynamic()) {
+                    updateActiveDynamicRenderer(activeLine, currentSecondsDyn, s);
+                }
+            }
+        }
+
         float clipX = layoutRightX - amllLyricLinePaddingX(activePreferred);
         float clipY = layoutLyricTop;
         float clipW = layoutRightW + amllLyricLinePaddingX(activePreferred) * 2f;
         float clipH = layoutLyricH;
         for (int i = 0; i < lyricCache.size(); i++) {
             CachedLyricLine line = lyricCache.get(i);
-            boolean isActive = i == active;
+            boolean isActive = isActiveLine(i, active);
             boolean sharpen = hoveredLyrics && !isActive;
-            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : sharpen ? line.hoverRenderer : line.inactiveRenderer;
+            float blurLevel = line.currentBlurVisual;
+            boolean useBlur = blurLevel > 0.001f && !hoveredLyrics && !isActive;
+            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : useBlur ? rendererForAMLLLineBlur(line, blurLevel) : sharpen ? line.hoverRenderer : line.inactiveRenderer;
             if (lineRenderer == null || !line.initialized) continue;
             float alpha = clamp(line.currentOpacity * globalAlpha, 0f, 1f);
             if (alpha <= 0.01f) continue;
             float scale = clamp(line.currentScale, 0.86f, 1.08f);
-            float texW = isActive ? line.activeW : sharpen ? line.hoverW : line.inactiveW;
-            float texH = isActive ? line.activeH : sharpen ? line.hoverH : line.inactiveH;
-            float pad = isActive ? line.activePad : sharpen ? line.hoverPad : line.inactivePad;
+            float texW = isActive ? line.activeW : useBlur ? line.blurW : sharpen ? line.hoverW : line.inactiveW;
+            float texH = isActive ? line.activeH : useBlur ? line.blurH : sharpen ? line.hoverH : line.inactiveH;
+            float pad = isActive ? line.activePad : useBlur ? line.blurPad : sharpen ? line.hoverPad : line.inactivePad;
             float contentH = Math.max(1f, texH - pad * 2f);
             float rawX = layoutRightX - pad;
+            if (line.lineRef != null && line.lineRef.isDuet()) {
+                rawX = layoutRightX + layoutRightW - texW + pad;
+            }
             float rawY = line.currentY - pad;
             float originX = layoutRightX;
             float originY = line.currentY + contentH * 0.5f;
@@ -2121,6 +3314,49 @@ public class Musicpage extends Screen {
         return true;
     }
 
+    private float computeAMLLGroupBlur(int index) {
+        return computeAMLLLineBlur(groupMainIndex(index));
+    }
+
+    private float computeAMLLLineBlur(int index) {
+        int groupIndex = groupMainIndex(index);
+        if (amllBufferedGroups.contains(groupIndex) || amllHotGroups.contains(groupIndex) || hoveredLyrics) return 0f;
+        int latest = amllBufferedGroups.isEmpty() ? amllScrollToIndex : minSet(amllBufferedGroups);
+        float blur = 1f;
+        if (groupIndex < amllScrollToIndex) blur += Math.abs(amllScrollToIndex - groupIndex) + 1f;
+        else blur += Math.abs(groupIndex - Math.max(amllScrollToIndex, latest));
+        if (width <= 1024) blur *= 0.8f;
+        return Math.min(5f, blur);
+    }
+
+    private float amllMaxLineBlurPad(float s) {
+        return Math.max(12f, 5f * 5.5f * Math.max(1f, s));
+    }
+
+    private SkijaRenderer rendererForAMLLLineBlur(CachedLyricLine line, float blurLevel) {
+        if (line == null || line.blurRenderer == null || line.inactiveImage == null) return null;
+        float sigma = clamp(blurLevel, 0f, 5f);
+        if (Math.abs(line.currentBlurSigma - sigma) < 0.05f && line.blurReady) return line.blurRenderer;
+        line.blurRenderer.clear(0x00000000);
+        Canvas c = line.blurRenderer.canvas();
+        c.save();
+        float drawScale = Math.max(1f, guiScale);
+        c.scale(drawScale, drawScale);
+        float dx = line.blurPad - line.inactivePad;
+        float dy = line.blurPad - line.inactivePad;
+        try (Paint paint = new Paint(); ImageFilter blur = ImageFilter.makeBlur(sigma, sigma, FilterTileMode.DECAL)) {
+            paint.setAntiAlias(true);
+            paint.setImageFilter(blur);
+            paint.setColor(WHITE);
+            c.drawImageRect(line.inactiveImage, Rect.makeXYWH(dx, dy, line.inactiveW, line.inactiveH), paint);
+        }
+        c.restore();
+        line.blurRenderer.upload();
+        line.currentBlurSigma = sigma;
+        line.blurReady = true;
+        return line.blurRenderer;
+    }
+
     private void blitInterludeDots(GuiGraphicsExtractor g, float s, float clipX, float clipY, float clipW, float clipH, float globalAlpha) {
         if (interludeOpacity <= 0.01f) return;
         if (!ensureInterludeDotRenderer(s)) return;
@@ -2128,26 +3364,31 @@ public class Musicpage extends Screen {
         float current = clamp(interludeCurrentTime - interludeStartTime, 0f, duration);
         float interludeDuration = duration * 1000f;
         float currentDuration = current * 1000f;
-        float remaining = interludeDuration - currentDuration;
         float breatheDuration = interludeDuration / Math.max(1f, (float) Math.ceil(interludeDuration / 1500f));
         float scale = 1f;
+
+        float globalOpacity = 1f;
         scale *= (float) Math.sin(1.5f * Math.PI - currentDuration / breatheDuration * 2f) / 20f + 1f;
         if (currentDuration < 2000f) scale *= easeOutExpo(currentDuration / 2000f);
-        float globalOpacity = 1f;
         if (currentDuration < 500f) globalOpacity = 0f;
         else if (currentDuration < 1000f) globalOpacity *= (currentDuration - 500f) / 500f;
-        if (remaining < 750f) scale *= 1f - easeInOutBack((750f - remaining) / 750f / 2f);
-        if (remaining < 375f) globalOpacity *= clamp01(remaining / 375f);
+        if (interludeDuration - currentDuration < 750f) scale *= 1f - easeInOutBack((750f - (interludeDuration - currentDuration)) / 750f / 2f);
+        if (interludeDuration - currentDuration < 375f) globalOpacity *= clamp01((interludeDuration - currentDuration) / 375f);
         float dotsDuration = clampPositive(interludeDuration - 750f);
         float groupScale = clampPositive(scale) * 0.7f;
+
         float dot = amllInterludeDotSize();
         float gap = amllInterludeDotGap();
         float contentW = dot * 3f + gap * 2f;
-        float baseX = layoutRightX + amllInterludeDotPaddingX() + (contentW - contentW * groupScale) * 0.5f;
+        float baseX = interludeNextDuet
+                ? layoutRightX + layoutRightW - contentW * groupScale - amllInterludeDotPaddingX()
+                : layoutRightX + amllInterludeDotPaddingX();
         float baseY = interludeY + interludeSlotHeight(s) * 0.5f;
-        float dot0Opacity = dotsDuration > 0f ? clamp(0.25f, currentDuration * 3f / dotsDuration * 0.75f, 1f) : 1f;
-        float dot1Opacity = dotsDuration > 0f ? clamp(0.25f, (currentDuration - dotsDuration / 3f) * 3f / dotsDuration * 0.75f, 1f) : 1f;
-        float dot2Opacity = dotsDuration > 0f ? clamp(0.25f, (currentDuration - dotsDuration / 3f * 2f) * 3f / dotsDuration * 0.75f, 1f) : 1f;
+
+        float dot0Opacity = clamp(0.25f, currentDuration * 3f / dotsDuration * 0.75f, 1f);
+        float dot1Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f) * 3f / dotsDuration * 0.75f, 1f);
+        float dot2Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f * 2f) * 3f / dotsDuration * 0.75f, 1f);
+
         for (int i = 0; i < 3; i++) {
             float dotOpacity = i == 0 ? dot0Opacity : i == 1 ? dot1Opacity : dot2Opacity;
             float size = dot * groupScale;
@@ -2662,7 +3903,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricLineGap(float s) {
-        return 0f * s;
+        return 45f * s;
     }
 
     private float amllInterludeDotSize() {
@@ -2671,7 +3912,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllInterludeDotGap() {
-        return amllLyricFontSize() * 0.25f + amllCssPx(4f);
+        return amllLyricFontSize() * 0.25f;
     }
 
     private float amllInterludeDotPaddingX() {
@@ -2679,7 +3920,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllInterludeDotPaddingY() {
-        return layoutRightW * 0.025f;
+        return layoutLyricH * 0.025f;
     }
 
     private float fitTextSize(String text, Typeface tf, float preferredSize, float minSize, float maxWidth) {
@@ -2762,7 +4003,46 @@ public class Musicpage extends Screen {
         return rgb((int)(gray + (r - gray) * factor), (int)(gray + (g - gray) * factor), (int)(gray + (b - gray) * factor));
     }
 
-    private record LyricLine(float time, String text) {}
+    private record RubyText(float startTime, float endTime, String text) {}
+
+    private record LyricWord(float startTime, float endTime, String word, String romanWord, java.util.List<RubyText> ruby) {
+        public LyricWord(float startTime, float endTime, String word) {
+            this(startTime, endTime, word, null, List.of());
+        }
+        public LyricWord(float startTime, float endTime, String word, String romanWord) {
+            this(startTime, endTime, word, romanWord, List.of());
+        }
+        public LyricWord withRomanWord(String romanWord) {
+            return new LyricWord(startTime, endTime, word, romanWord, ruby);
+        }
+    }
+
+    private record LyricLine(float startTime, float endTime, String text, boolean isBG,
+                             java.util.List<LyricWord> words, String translation, String romanization, boolean isDuet) {
+        public LyricLine(float startTime, float endTime, String text, boolean isBG,
+                         java.util.List<LyricWord> words, String translation, boolean isDuet) {
+            this(startTime, endTime, text, isBG, words, translation, null, isDuet);
+        }
+        public LyricLine(float startTime, float endTime, String text, boolean isBG) {
+            this(startTime, endTime, text, isBG, null, null, null, false);
+        }
+        public boolean isDynamic() { return words != null && !words.isEmpty(); }
+    }
+
+    private record WordRange(float startTime, float endTime,
+                             float startX, float endX,
+                             float y, float h,
+                             float baseY, float baseH,
+                             float rubyY, float rubyH,
+                             float romanY, float romanH, float romanStartX, float romanEndX,
+                             float romanWordStartX, float romanWordEndX, float romanWordY, float romanWordH,
+                             String wordText, java.util.List<EmphasisSlice> emphasisSlices,
+                             int lineIndex, int wordIndex, int wordCount,
+                             boolean emphasize, java.util.List<RubyText> ruby) {}
+
+    private record RomanWordBox(float startX, float endX, float y, float h) {}
+
+    private record EmphasisSlice(float startX, float endX) {}
 
     private record TextSegment(String text, float width, boolean isSpace) {}
 
@@ -2770,7 +4050,7 @@ public class Musicpage extends Screen {
 
     private record LyricPresentation(float opacity, float scale) {}
 
-    private record InterludeState(boolean active, int anchor, float start, float end) {}
+    private record InterludeState(boolean active, int anchor, float start, float end, boolean nextDuet) {}
 
     private record HorizontalGrid(float coverY, float controlsY, float controlsH, float lyricTop, float lyricH) {}
 
@@ -2805,6 +4085,8 @@ public class Musicpage extends Screen {
     }
 
     private static final class CachedLyricLine implements AutoCloseable {
+        LyricLine lineRef;
+        Image whiteImage;
         final Image activeImage;
         final SkijaRenderer activeRenderer;
         final float activeW;
@@ -2820,15 +4102,29 @@ public class Musicpage extends Screen {
         final float hoverW;
         final float hoverH;
         final float hoverPad;
+        final Image blurImage;
+        final SkijaRenderer blurRenderer;
+        final float blurW;
+        final float blurH;
+        final float blurPad;
+        java.util.List<WordRange> dynamicWordRanges = List.of();
         float currentY;
         float velocityY;
         float currentScale = 1f;
         float velocityScale;
         float currentOpacity = 1f;
         float velocityOpacity;
+        float currentBlurVisual;
+        float velocityBlur;
+        float currentBlurSigma = -1f;
+        float currentBrightAlpha = 1f;
+        float currentDarkAlpha = 0.2f;
+        float targetBrightAlpha = 1f;
+        float targetDarkAlpha = 0.2f;
+        boolean blurReady;
         boolean initialized;
 
-        CachedLyricLine(TextImage active, TextImage inactive, TextImage hover) {
+        CachedLyricLine(TextImage active, TextImage inactive, TextImage hover, TextImage blurred) {
             this.activeImage = active.image;
             this.activeRenderer = active.renderer;
             this.activeW = active.w;
@@ -2844,16 +4140,28 @@ public class Musicpage extends Screen {
             this.hoverW = hover.w;
             this.hoverH = hover.h;
             this.hoverPad = hover.pad;
+            this.blurImage = blurred.image;
+            this.blurRenderer = blurred.renderer;
+            this.blurW = blurred.w;
+            this.blurH = blurred.h;
+            this.blurPad = blurred.pad;
+        }
+
+        void setDynamicWordRanges(java.util.List<WordRange> ranges) {
+            this.dynamicWordRanges = ranges == null ? List.of() : ranges;
         }
 
         @Override
         public void close() {
+            if (whiteImage != null) whiteImage.close();
             if (activeImage != null) activeImage.close();
             if (inactiveImage != null) inactiveImage.close();
             if (hoverImage != null) hoverImage.close();
+            if (blurImage != null) blurImage.close();
             if (activeRenderer != null) activeRenderer.close();
             if (inactiveRenderer != null) inactiveRenderer.close();
             if (hoverRenderer != null) hoverRenderer.close();
+            if (blurRenderer != null) blurRenderer.close();
         }
     }
 }

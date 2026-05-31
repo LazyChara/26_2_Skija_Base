@@ -20,15 +20,24 @@ import javax.sound.sampled.SourceDataLine;
 import java.io.BufferedInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 import java.util.logging.Level;
+import java.util.concurrent.CompletableFuture;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+
 
 public class MusicLoader {
 
     private static final Path MUSIC_DIR = FabricLoader.getInstance().getGameDir().resolve("lazychara/music");
+    private static final Path AMLL_LIBRARY_DIR = Path.of("D:\\26_2_Skija_Base\\amll-player");
     private static final List<MusicTrack> tracks = new ArrayList<>();
 
     private static Thread playbackThread;
@@ -40,16 +49,19 @@ public class MusicLoader {
     private static volatile MusicTrack currentTrack;
     private static volatile boolean playbackEnded;
     private static SourceDataLine currentLine;
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     static {
         suppressJAudioTaggerLogs();
     }
 
     private static void suppressJAudioTaggerLogs() {
-        java.util.logging.Logger.getLogger("org.jaudiotagger").setLevel(Level.WARNING);
-        java.util.logging.Logger.getLogger("org.jaudiotagger.audio").setLevel(Level.WARNING);
-        java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac").setLevel(Level.WARNING);
-        java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac.FlacInfoReader").setLevel(Level.WARNING);
+        java.util.logging.Logger.getLogger("org.jaudiotagger").setLevel(Level.SEVERE);
+        java.util.logging.Logger.getLogger("org.jaudiotagger.audio").setLevel(Level.SEVERE);
+        java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac").setLevel(Level.SEVERE);
+        java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac.FlacInfoReader").setLevel(Level.SEVERE);
     }
 
     public static void init() {
@@ -138,8 +150,11 @@ public class MusicLoader {
         }
 
         String qualityLabel = makeQualityLabel(format, sampleRate, bitDepth);
-        return new MusicTrack(path, title, artist, album, duration,
+        MusicTrack track = new MusicTrack(path, title, artist, album, duration,
                 format, coverArt, coverMimeType, lyrics, qualityLabel);
+
+        loadCachedOrFetchLyrics(track);
+        return track;
     }
 
     private static int readSampleRate(AudioHeader header) {
@@ -147,6 +162,161 @@ public class MusicLoader {
         try { return header.getSampleRateAsNumber(); } catch (Exception ignored) {}
         try { return Integer.parseInt(header.getSampleRate()); } catch (Exception ignored) {}
         return 0;
+    }
+
+    private static void loadCachedOrFetchLyrics(MusicTrack track) {
+        Path jsonPath = MUSIC_DIR.resolve(track.title() + ".json");
+        if (Files.exists(jsonPath)) {
+            try {
+                String cachedLyrics = Files.readString(jsonPath);
+                if (!cachedLyrics.isBlank()) {
+                    track.setOnlineLyrics(cachedLyrics);
+                }
+            } catch (Exception e) {
+                SkijaTestClient.LOGGER.info("[MusicLoader] Failed to read cached lyrics for {}", track.title(), e);
+            }
+            return;
+        }
+
+        if (cacheLocalAMLLyrics(track, jsonPath)) {
+            try {
+                String cachedLyrics = Files.readString(jsonPath);
+                if (!cachedLyrics.isBlank()) {
+                    track.setOnlineLyrics(cachedLyrics);
+                }
+            } catch (Exception e) {
+                SkijaTestClient.LOGGER.info("[MusicLoader] Failed to read local cached AMLL lyrics for {}", track.title(), e);
+            }
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+                try {
+                    Path indexPath = MUSIC_DIR.resolve("amll_index.jsonl");
+                    if (!Files.exists(indexPath)) {
+                        SkijaTestClient.LOGGER.info("[MusicLoader] Downloading AMLL index...");
+                        HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create("https://amlldb.bikonoo.com/metadata/raw-lyrics-index.jsonl"))
+                                .GET()
+                                .build();
+                        HttpResponse<Path> response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(indexPath));
+                        if (response.statusCode() != 200) {
+                            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to download AMLL index.");
+                            return;
+                        }
+                    }
+                    String targetRawFile = null;
+                    try (java.io.BufferedReader reader = Files.newBufferedReader(indexPath)) {
+                        String line;
+                        String tTitle = track.title() != null ? track.title().toLowerCase() : "";
+                        String tArtist = track.artist() != null ? track.artist().toLowerCase() : "";
+                        while ((line = reader.readLine()) != null) {
+                            String lowerLine = line.toLowerCase();
+                            if (!tTitle.isEmpty() && lowerLine.contains(tTitle)) {
+                                boolean artistMatch = tArtist.isEmpty();
+                                if (!artistMatch) {
+                                    String[] splitArtists = tArtist.split("[,/&]");
+                                    for (String a : splitArtists) {
+                                        if (!a.trim().isEmpty() && lowerLine.contains(a.trim())) {
+                                            artistMatch = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (artistMatch) {
+                                    int i = line.indexOf("\"rawLyricFile\":\"");
+                                    if (i != -1) {
+                                        int start = i + 16;
+                                        int end = line.indexOf("\"", start);
+                                        if (end != -1) {
+                                            targetRawFile = line.substring(start, end);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (targetRawFile != null) {
+                        HttpRequest req = HttpRequest.newBuilder()
+                                .uri(URI.create("https://amlldb.bikonoo.com/raw-lyrics/" + targetRawFile))
+                                .GET()
+                                .build();
+                        HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                        if (res.statusCode() == 200 && res.body() != null && !res.body().isBlank()) {
+                            Files.writeString(jsonPath, res.body());
+                            track.setOnlineLyrics(res.body());
+                            SkijaTestClient.LOGGER.info("[MusicLoader] Fetched and cached AMLL TTML lyrics for {}", track.title());
+                        }
+                    } else {
+                        SkijaTestClient.LOGGER.info("[MusicLoader] No AMLL lyrics found in index for {}", track.title());
+                    }
+                } catch (Exception e) {
+                    SkijaTestClient.LOGGER.info("[MusicLoader] Failed to fetch lyrics online for {}", track.title(), e);
+                }
+            });
+    }
+
+    private static boolean cacheLocalAMLLyrics(MusicTrack track, Path jsonPath) {
+        if (!Files.isDirectory(AMLL_LIBRARY_DIR)) return false;
+        try {
+            Files.createDirectories(MUSIC_DIR);
+            Path match = findLocalAMLLyrics(track);
+            if (match == null) return false;
+            Files.copy(match, jsonPath, StandardCopyOption.REPLACE_EXISTING);
+            SkijaTestClient.LOGGER.info("[MusicLoader] Cached local AMLL lyrics for {} from {}", track.title(), match);
+            return true;
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to cache local AMLL lyrics for {}", track.title(), e);
+            return false;
+        }
+    }
+
+    private static Path findLocalAMLLyrics(MusicTrack track) {
+        String targetTitle = normalizeLyricSearchText(track.title());
+        String targetArtist = normalizeLyricSearchText(track.artist());
+        if (targetTitle.isEmpty()) return null;
+
+        try (Stream<Path> stream = Files.walk(AMLL_LIBRARY_DIR)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".json"))
+                    .filter(path -> !path.toString().replace('\\', '/').contains("/node_modules/"))
+                    .filter(path -> localLyricMatches(path, targetTitle, targetArtist))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to search local AMLL lyrics directory {}", AMLL_LIBRARY_DIR, e);
+            return null;
+        }
+    }
+
+    private static boolean localLyricMatches(Path path, String targetTitle, String targetArtist) {
+        String fileName = path.getFileName().toString();
+        int dot = fileName.lastIndexOf('.');
+        String normalizedName = normalizeLyricSearchText(dot > 0 ? fileName.substring(0, dot) : fileName);
+        if (!normalizedName.isEmpty() && normalizedName.contains(targetTitle)) return true;
+
+        try {
+            String content = Files.readString(path);
+            String normalizedContent = normalizeLyricSearchText(content);
+            if (!normalizedContent.contains(targetTitle)) return false;
+            if (targetArtist.isEmpty() || "unknown".equals(targetArtist)) return true;
+            for (String artistPart : targetArtist.split("[,/&、，]") ) {
+                String part = artistPart.trim();
+                if (!part.isEmpty() && normalizedContent.contains(part)) return true;
+            }
+            return false;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static String normalizeLyricSearchText(String value) {
+        if (value == null) return "";
+        return value.toLowerCase()
+                .replaceAll("\\s+", "")
+                .replaceAll("[\\p{Punct}，。！？、；：（）【】《》“”‘’]+", "");
     }
 
     private static int readBitDepth(AudioHeader header) {
@@ -319,7 +489,7 @@ public class MusicLoader {
             }
         } catch (InterruptedException ignored) {
         } catch (Exception e) {
-            SkijaTestClient.LOGGER.warn("[MusicLoader] Failed to play {}", track.filePath(), e);
+            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to play {}", track.filePath(), e);
         } finally {
             if (pcm != null && pcm != raw) {
                 try { pcm.close(); } catch (Exception ignored) {}
@@ -457,7 +627,7 @@ public class MusicLoader {
             try { bitstream.close(); } catch (Exception ignored) {}
         } catch (InterruptedException ignored) {
         } catch (Exception e) {
-            SkijaTestClient.LOGGER.warn("[MusicLoader] Failed to play {}", track.filePath(), e);
+            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to play {}", track.filePath(), e);
         } finally {
             SourceDataLine line = currentLine;
             if (line != null && serial == playbackSerial) {
@@ -524,24 +694,61 @@ public class MusicLoader {
         return true;
     }
 
-    public record MusicTrack(
-            Path   filePath,
-            String title,
-            String artist,
-            String album,
-            int    duration,
-            String format,
-            byte[] coverArt,
-            String coverMimeType,
-            String lyrics,
-            String qualityLabel
-    ) {
+    public static class MusicTrack {
+        private final Path filePath;
+        private final String title;
+        private final String artist;
+        private final String album;
+        private final int duration;
+        private final String format;
+        private final byte[] coverArt;
+        private final String coverMimeType;
+        private final String originalLyrics;
+        private final String qualityLabel;
+
+        private volatile String onlineLyrics;
+
+        public MusicTrack(Path filePath, String title, String artist, String album, int duration, String format, byte[] coverArt, String coverMimeType, String originalLyrics, String qualityLabel) {
+            this.filePath = filePath;
+            this.title = title;
+            this.artist = artist;
+            this.album = album;
+            this.duration = duration;
+            this.format = format;
+            this.coverArt = coverArt;
+            this.coverMimeType = coverMimeType;
+            this.originalLyrics = originalLyrics;
+            this.qualityLabel = qualityLabel;
+            this.onlineLyrics = null;
+        }
+
+        public Path filePath() { return filePath; }
+        public String title() { return title; }
+        public String artist() { return artist; }
+        public String album() { return album; }
+        public int duration() { return duration; }
+        public String format() { return format; }
+        public byte[] coverArt() { return coverArt; }
+        public String coverMimeType() { return coverMimeType; }
+        public String qualityLabel() { return qualityLabel; }
+
+        public String lyrics() {
+            if (onlineLyrics != null && !onlineLyrics.isBlank()) {
+                return onlineLyrics;
+            }
+            return originalLyrics;
+        }
+
+        public void setOnlineLyrics(String lyrics) {
+            this.onlineLyrics = lyrics;
+        }
+
         public boolean hasCoverArt() {
             return coverArt != null && coverArt.length > 0;
         }
 
         public boolean hasLyrics() {
-            return lyrics != null && !lyrics.isEmpty();
+            return lyrics() != null && !lyrics().isEmpty();
         }
 
         public String durationFormatted() {
