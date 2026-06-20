@@ -1,20 +1,21 @@
-package com.lazychara.skijatest.client;
+package com.lazychara.skijatest.client.Musicpage;
+
+import static com.lazychara.skijatest.client.Musicpage.MusicPageIcons.*;
+import static com.lazychara.skijatest.client.Musicpage.MusicPageMath.*;
 
 import io.github.humbleui.skija.Canvas;
 import io.github.humbleui.skija.FilterBlurMode;
-import io.github.humbleui.skija.Font;
-import io.github.humbleui.skija.Image;
-import io.github.humbleui.skija.ImageFilter;
 import io.github.humbleui.skija.FilterTileMode;
+import io.github.humbleui.skija.Font;
+import io.github.humbleui.skija.ImageFilter;
+import io.github.humbleui.skija.Image;
 import io.github.humbleui.skija.MaskFilter;
 import io.github.humbleui.skija.Paint;
 import io.github.humbleui.skija.Path;
 import io.github.humbleui.skija.Typeface;
 import io.github.humbleui.types.Rect;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -27,7 +28,6 @@ import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.joml.Matrix3x2f;
-import org.joml.Matrix3x2fc;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -38,6 +38,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+
+import com.lazychara.skijatest.client.AMLLFluidBackground;
+import com.lazychara.skijatest.client.MusicLoader;
+import com.lazychara.skijatest.client.SkijaRenderer;
+import com.lazychara.skijatest.client.SkijaTestClient;
+import com.lazychara.skijatest.client.SkijaTestScreen;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -80,26 +86,6 @@ public class Musicpage extends Screen {
     private static final String LYRIC_BREAK_PUNCTUATION = ",.;:!?，。；：！？、）】》」』’”)[\\]}>~…";
     private static final Pattern LRC_PATTERN = Pattern.compile("\\[(\\d{1,2}):(\\d{1,2})(?:[.:](\\d{1,3}))?]\\s*(.*)");
     private static final Pattern LYRIC_SPACE_PATTERN = Pattern.compile("\\s+");
-    private static final String ICON_PLAY = "M5.80762 32.4896V5.4925C5.80762 4.305 6.12305 3.41438 6.75391 2.82063C7.38477 2.22688 8.13932 1.93 9.01758 1.93C9.78451 1.93 10.5391 2.14029 11.2812 2.56086L33.7324 15.6605C34.5859 16.1553 35.223 16.6562 35.6436 17.1634C36.0641 17.6582 36.2744 18.2705 36.2744 19.0003C36.2744 19.7054 36.0641 20.3177 35.6436 20.8372C35.223 21.3444 34.5859 21.8392 33.7324 22.3216L11.2812 35.4212C10.5391 35.8542 9.78451 36.0706 9.01758 36.0706C8.13932 36.0706 7.38477 35.7676 6.75391 35.1614C6.12305 34.5677 5.80762 33.6771 5.80762 32.4896Z";
-    private static final String ICON_PAUSE = "M8.46953 37C7.37801 37 6.56603 36.7271 6.03359 36.1814C5.51445 35.6489 5.25488 34.8502 5.25488 33.7854V4.21464C5.25488 3.14975 5.52111 2.35108 6.05355 1.81864C6.59931 1.27288 7.40463 1 8.46953 1H13.3813C14.4329 1 15.2249 1.27288 15.7574 1.81864C16.3031 2.35108 16.576 3.14975 16.576 4.21464V33.7854C16.576 34.8502 16.3031 35.6489 15.7574 36.1814C15.2249 36.7271 14.4329 37 13.3813 37H8.46953ZM24.6426 37C23.5644 37 22.759 36.7271 22.2266 36.1814C21.6942 35.6489 21.4279 34.8502 21.4279 33.7854V4.21464C21.4279 3.14975 21.6942 2.35108 22.2266 1.81864C22.7724 1.27288 23.5777 1 24.6426 1H29.5544C30.6193 1 31.4179 1.27288 31.9504 1.81864C32.4828 2.35108 32.7491 3.14975 32.7491 4.21464V33.7854C32.7491 34.8502 32.4828 35.6489 31.9504 36.1814C31.4179 36.7271 30.6193 37 29.5544 37H24.6426Z";
-    private static final String ICON_FORWARD_LEFT = "M62 60.0717C65.938 62.3453 67.9069 63.4821 68.5677 64.9662C69.1441 66.2608 69.1441 67.7391 68.5677 69.0336C67.9069 70.5177 65.938 71.6545 62 73.9281L41 86.0525C37.062 88.326 35.0931 89.4628 33.4774 89.293C32.0681 89.1449 30.7878 88.4057 29.9549 87.2593C29 85.945 29 83.6714 29 79.1243V54.8755C29 50.3284 29 48.0548 29.9549 46.7405C30.7878 45.5941 32.0681 44.8549 33.4774 44.7068C35.0931 44.537 37.062 45.6738 41 47.9473L62 60.0717Z";
-    private static final String ICON_FORWARD_RIGHT = "M102 60.0717C105.938 62.3453 107.907 63.4821 108.568 64.9662C109.144 66.2608 109.144 67.7391 108.568 69.0336C107.907 70.5177 105.938 71.6545 102 73.9281L81 86.0525C77.062 88.326 75.0931 89.4628 73.4774 89.293C72.0681 89.1449 70.7878 88.4057 69.9549 87.2593C69 85.945 69 83.6714 69 79.1243V54.8755C69 50.3284 69 48.0548 69.9549 46.7405C70.7878 45.5941 72.0681 44.8549 73.4774 44.7068C75.0931 44.537 77.062 45.6738 81 47.9473L102 60.0717Z";
-    private static final String ICON_REWIND_RIGHT = "M72 60.0717C68.062 62.3453 66.0931 63.4821 65.4323 64.9662C64.8559 66.2608 64.8559 67.7391 65.4323 69.0336C66.0931 70.5177 68.062 71.6545 72 73.9281L93 86.0525C96.938 88.326 98.9069 89.4628 100.523 89.293C101.932 89.1449 103.212 88.4057 104.045 87.2593C105 85.945 105 83.6714 105 79.1243V54.8755C105 50.3284 105 48.0548 104.045 46.7405C103.212 45.5941 101.932 44.8549 100.523 44.7068C98.9069 44.537 96.938 45.6738 93 47.9473L72 60.0717Z";
-    private static final String ICON_REWIND_LEFT = "M32 60.0717C28.062 62.3453 26.0931 63.4821 25.4323 64.9662C24.8559 66.2608 24.8559 67.7391 25.4323 69.0336C26.0931 70.5177 28.062 71.6545 32 73.9281L53 86.0525C56.938 88.326 58.9069 89.4628 60.5226 89.293C61.9319 89.1449 63.2122 88.4057 64.0451 87.2593C65 85.945 65 83.6714 65 79.1243V54.8755C65 50.3284 65 48.0548 64.0451 46.7405C63.2122 45.5941 61.9319 44.8549 60.5226 44.7068C58.9069 44.537 56.938 45.6738 53 47.9473L32 60.0717Z";
-    private static final String ICON_SHUFFLE = "M10.624 36.3125C10.624 35.75 10.8218 35.2754 11.2173 34.8887C11.6216 34.4932 12.1094 34.2954 12.6807 34.2954H15.4756C16.3896 34.2954 17.1455 34.1372 17.7432 33.8208C18.3496 33.5044 18.9341 32.9946 19.4966 32.2915L27.3936 22.3379C28.3955 21.0811 29.4282 20.2285 30.4917 19.7803C31.5552 19.332 32.79 19.1079 34.1963 19.1079H36.4243V16.1548C36.4243 15.6714 36.5605 15.2935 36.833 15.021C37.1055 14.7397 37.479 14.5991 37.9536 14.5991C38.1821 14.5991 38.3843 14.6343 38.5601 14.7046C38.7446 14.7749 38.9072 14.8672 39.0479 14.9814L44.8223 19.8857C45.1826 20.1846 45.3628 20.5493 45.3628 20.98C45.3628 21.4106 45.1826 21.7754 44.8223 22.0742L39.0479 26.9917C38.9072 27.106 38.7446 27.2026 38.5601 27.2817C38.3843 27.3521 38.1821 27.3872 37.9536 27.3872C37.479 27.3872 37.1055 27.2466 36.833 26.9653C36.5605 26.6841 36.4243 26.3018 36.4243 25.8184V23.1421H33.9194C33.3218 23.1421 32.8076 23.2036 32.377 23.3267C31.9551 23.4497 31.564 23.6562 31.2036 23.9463C30.8521 24.2275 30.4829 24.6143 30.0962 25.1064L21.606 35.7061C20.8853 36.6113 20.0986 37.2749 19.2461 37.6968C18.3936 38.1099 17.3389 38.3164 16.082 38.3164H12.6807C12.1094 38.3164 11.6216 38.123 11.2173 37.7363C10.8218 37.3496 10.624 36.875 10.624 36.3125ZM10.624 21.125C10.624 20.5625 10.8218 20.0879 11.2173 19.7012C11.6216 19.3057 12.1094 19.1079 12.6807 19.1079H15.7261C16.9829 19.1079 18.0947 19.3188 19.0615 19.7407C20.0371 20.1538 20.8853 20.8174 21.606 21.7314L30.0435 32.2783C30.5972 32.9727 31.1992 33.4824 31.8496 33.8076C32.5 34.1328 33.291 34.2954 34.2227 34.2954H36.4243V31.5664C36.4243 31.083 36.5605 30.7007 36.833 30.4194C37.1055 30.1382 37.479 29.9976 37.9536 29.9976C38.1821 29.9976 38.3843 30.0371 38.5601 30.1162C38.7446 30.1865 38.9072 30.2832 39.0479 30.4062L44.8223 35.2974C45.1826 35.5962 45.3628 35.9609 45.3628 36.3916C45.3628 36.8223 45.1826 37.187 44.8223 37.4858L39.0479 42.3901C38.9072 42.5132 38.7446 42.6099 38.5601 42.6802C38.3843 42.7593 38.1821 42.7988 37.9536 42.7988C37.479 42.7988 37.1055 42.6582 36.833 42.377C36.5605 42.0957 36.4243 41.7134 36.4243 41.23V38.3164H34.1699C32.9043 38.3164 31.7222 38.1011 30.6235 37.6704C29.5249 37.231 28.5625 36.4927 27.7363 35.4556L19.4966 25.146C18.9341 24.4429 18.2925 23.9331 17.5718 23.6167C16.8599 23.3003 16.0381 23.1421 15.1064 23.1421H12.6807C12.1094 23.1421 11.6216 22.9443 11.2173 22.5488C10.8218 22.1533 10.624 21.6787 10.624 21.125Z";
-    private static final String ICON_REPEAT = "M14.2495 28.9956C13.6519 28.9956 13.1465 28.7891 12.7334 28.376C12.3203 27.9541 12.1138 27.4531 12.1138 26.873V25.3438C12.1138 23.832 12.4565 22.5312 13.1421 21.4414C13.8276 20.3516 14.8076 19.5166 16.082 18.9365C17.3564 18.3477 18.877 18.0532 20.6436 18.0532H30.3599V15.4033C30.3599 14.9111 30.4961 14.5288 30.7686 14.2563C31.041 13.9751 31.4146 13.8345 31.8892 13.8345C32.1177 13.8345 32.3198 13.874 32.4956 13.9531C32.6714 14.0234 32.8296 14.1113 32.9702 14.2168L38.7578 19.1343C39.1182 19.4331 39.2939 19.7979 39.2852 20.2285C39.2852 20.6504 39.1094 21.0107 38.7578 21.3096L32.9702 26.2271C32.8296 26.3501 32.6714 26.4468 32.4956 26.5171C32.3198 26.5874 32.1177 26.6226 31.8892 26.6226C31.4146 26.6226 31.041 26.4819 30.7686 26.2007C30.4961 25.9194 30.3599 25.5415 30.3599 25.0669V22.1929H20.459C19.1846 22.1929 18.1826 22.5269 17.4531 23.1948C16.7236 23.8628 16.3589 24.7812 16.3589 25.9502V26.873C16.3589 27.4531 16.1523 27.9541 15.7393 28.376C15.3262 28.7891 14.8296 28.9956 14.2495 28.9956ZM41.7505 26.7017C42.3306 26.7017 42.8271 26.9082 43.2402 27.3213C43.6621 27.7344 43.873 28.2354 43.873 28.8242V30.3535C43.873 31.8652 43.5303 33.166 42.8447 34.2559C42.1592 35.3457 41.1792 36.1851 39.9048 36.7739C38.6304 37.354 37.1055 37.644 35.3301 37.644H25.627V40.2676C25.627 40.751 25.4907 41.1333 25.2183 41.4146C24.9458 41.6958 24.5723 41.8364 24.0977 41.8364C23.8691 41.8364 23.6626 41.7969 23.478 41.7178C23.3022 41.6475 23.1484 41.5552 23.0166 41.4409L17.2158 36.5366C16.873 36.2466 16.6973 35.8862 16.6885 35.4556C16.6885 35.0249 16.8643 34.6558 17.2158 34.3481L23.0166 29.4307C23.1484 29.3164 23.3022 29.2241 23.478 29.1538C23.6626 29.0835 23.8691 29.0483 24.0977 29.0483C24.5723 29.0483 24.9458 29.189 25.2183 29.4702C25.4907 29.7427 25.627 30.125 25.627 30.6172V33.4912H35.5278C36.8022 33.4912 37.8042 33.1616 38.5337 32.5024C39.2632 31.8345 39.6279 30.916 39.6279 29.7471V28.8242C39.6279 28.2354 39.8301 27.7344 40.2344 27.3213C40.6475 26.9082 41.1528 26.7017 41.7505 26.7017Z";
-    private static final String ICON_SPEAKER = "M14.9042 27.1802C14.4202 27.1802 14.0473 26.9897 13.595 26.5612L10.3815 23.5461C10.3339 23.5065 10.2863 23.4906 10.2228 23.4906H8.01703C6.70778 23.4906 5.99365 22.7527 5.99365 21.38V18.4442C5.99365 17.0715 6.70778 16.3257 8.01703 16.3257H10.2307C10.2863 16.3257 10.3418 16.3019 10.3815 16.2622L13.595 13.2709C14.079 12.8107 14.4361 12.6282 14.8883 12.6282C15.6104 12.6282 16.142 13.1915 16.142 13.8977V25.9344C16.142 26.6406 15.6104 27.1802 14.9042 27.1802Z";
-    private static final String ICON_SPEAKER3_BODY = "M24.0403 27.1802C23.5642 27.1802 23.1913 26.9897 22.739 26.5612L19.5176 23.5461C19.4779 23.5065 19.4224 23.4906 19.3668 23.4906H17.161C15.8518 23.4906 15.1377 22.7527 15.1377 21.38V18.4442C15.1377 17.0715 15.8518 16.3257 17.161 16.3257H19.3668C19.4303 16.3257 19.4779 16.3019 19.5255 16.2622L22.739 13.2709C23.223 12.8107 23.5721 12.6282 24.0324 12.6282C24.7544 12.6282 25.286 13.1915 25.286 13.8977V25.9344C25.286 26.6406 24.7544 27.1802 24.0403 27.1802Z";
-    private static final String ICON_SPEAKER3_W1 = "M28.0948 23.6653C27.6028 23.3559 27.4996 22.7687 27.8964 22.1101C28.2931 21.4991 28.5232 20.7136 28.5232 19.8964C28.5232 19.0712 28.301 18.2856 27.8964 17.6826C27.4917 17.032 27.6028 16.4369 28.0948 16.1274C28.547 15.8418 29.1104 15.9529 29.404 16.3576C30.0863 17.3097 30.491 18.5713 30.491 19.8964C30.491 21.2214 30.0863 22.4831 29.404 23.4273C29.1104 23.8399 28.547 23.943 28.0948 23.6653Z";
-    private static final String ICON_SPEAKER3_W2 = "M31.6733 25.8711C31.1576 25.5696 31.0942 24.9428 31.4432 24.3794C32.2526 23.1257 32.7207 21.5468 32.7207 19.8964C32.7207 18.2459 32.2605 16.6591 31.4432 15.4133C31.0942 14.8499 31.1576 14.2231 31.6733 13.9137C32.1415 13.6439 32.7128 13.755 33.0143 14.2152C34.0855 15.7783 34.6885 17.8016 34.6885 19.8964C34.6885 21.9911 34.0775 23.9985 33.0143 25.5775C32.7128 26.0377 32.1415 26.1488 31.6733 25.8711Z";
-    private static final String ICON_SPEAKER3_W3 = "M35.2362 28.1007C34.7363 27.7992 34.6569 27.1803 34.9981 26.6249C36.1883 24.7286 36.9104 22.4196 36.9104 19.9122C36.9104 17.397 36.1883 15.0881 34.9981 13.1917C34.6569 12.6362 34.7363 12.0174 35.2362 11.7159C35.7123 11.4302 36.3073 11.5651 36.6088 12.0571C38.0133 14.2866 38.8702 16.9765 38.8702 19.9122C38.8702 22.8401 38.0291 25.5379 36.6088 27.7675C36.3073 28.2515 35.7123 28.3864 35.2362 28.1007Z";
-
-    private static final String ICON_LOSSLESS = "M16.0117 1.81812C18.4258 1.81812 19.8776 4.78099 20.958 7.92092L21.0631 8.23024L21.1659 8.54011L21.2666 8.84995C21.5987 9.88202 21.8972 10.9037 22.1828 11.8167C22.839 8.96008 22.4949 8.34671 23.1979 8.34671C23.4594 8.34671 23.724 8.53256 23.724 8.87123C23.724 9.0083 23.5105 10.461 23.2136 11.9166L23.1588 12.1809L23.1023 12.4436C23.0068 12.8791 22.9051 13.3002 22.8009 13.6704C25.8224 21.9469 28.0659 11.0453 28.3194 8.81691C28.3564 8.49556 28.5879 8.34672 28.8219 8.34672C29.1344 8.34672 29.3907 8.59283 29.3418 8.96318C28.8009 12.5671 27.9689 18.1818 24.5482 18.1818C22.6604 18.1818 21.5992 16.6374 20.7611 14.8678C20.179 13.6722 19.6841 12.2511 19.2288 10.8221L19.1203 10.4791C19.0844 10.3648 19.0487 10.2505 19.0132 10.1364L18.9073 9.79479C17.8713 6.44275 16.9926 3.33702 15.6457 3.33702C14.9875 3.33702 14.4995 4.05555 14.4657 4.05555C14.4036 4.05555 14.3548 3.76279 13.7401 2.96069C14.3251 2.26231 15.1314 1.81812 16.0117 1.81812ZM4.80934 1.82692C10.1957 1.82692 10.6747 16.6849 13.7232 16.6849C14.0811 16.6849 14.4669 16.4581 14.8886 15.9443C15.122 16.3577 15.3613 16.7247 15.6089 17.0478C15.0004 17.774 14.2433 18.1812 13.2952 18.1812C9.88906 18.1807 8.42559 12.2177 7.16605 8.19178C6.86941 9.48319 6.71544 10.6519 6.65516 11.1766C6.61775 11.5101 6.38397 11.662 6.14846 11.662C5.88728 11.662 5.62398 11.4752 5.62398 11.1416C5.62398 11.1167 5.62545 11.091 5.62848 11.0646C5.80292 9.74118 6.15443 7.73614 6.54802 6.3382C6.02411 4.90309 5.36971 3.33458 4.40561 3.33458C2.45924 3.33458 1.34461 8.44844 1.03117 11.1766C0.993764 11.5101 0.759979 11.662 0.524468 11.662C0.263303 11.662 0 11.4752 0 11.1416C0 11.1167 0.00146422 11.091 0.00449843 11.0646C0.0496669 10.7219 0.0980906 10.373 0.15073 10.0213L0.196904 9.71916C0.204779 9.66871 0.212746 9.61823 0.220807 9.56772L0.27033 9.26437C0.887195 5.57133 2.03712 1.82692 4.80934 1.82692ZM10.3981 1.81878C11.3654 1.81878 12.4031 2.34503 13.2976 3.57969C13.3476 3.63964 13.849 4.45427 14.0072 4.73669C14.554 5.77231 15.0302 7.038 15.4694 8.354L15.5832 8.69833C16.8447 12.5534 17.8174 16.7028 19.3326 16.7028C19.6918 16.7028 20.0814 16.4697 20.5126 15.9442C20.746 16.3575 20.9852 16.7245 21.2329 17.0476C20.6259 17.7724 19.8691 18.1812 18.9192 18.1812C13.565 18.1804 12.983 3.3313 10.0333 3.3313C9.36758 3.3313 8.87559 4.05559 8.84162 4.05559C8.7795 4.05559 8.7307 3.76287 8.11611 2.96083C8.7168 2.24348 9.52906 1.81878 10.3981 1.81878Z";
-    private static final String ICON_LYRICS_OFF_AMLL = "M22.8594 53.9102C22 53.9102 21.3229 53.6302 20.8281 53.0703C20.3464 52.5104 20.1055 51.7617 20.1055 50.8242V46.1953H18.9727C17.1237 46.1953 15.5156 45.8242 14.1484 45.082C12.7812 44.3398 11.7201 43.2721 10.9648 41.8789C10.2227 40.4857 9.85156 38.8125 9.85156 36.8594V21.5664C9.85156 19.6133 10.2161 17.9401 10.9453 16.5469C11.6875 15.1536 12.7552 14.0859 14.1484 13.3438C15.5417 12.5885 17.2214 12.2109 19.1875 12.2109H44.793C46.7721 12.2109 48.4518 12.5885 49.832 13.3438C51.2253 14.0859 52.2865 15.1536 53.0156 16.5469C53.7578 17.9401 54.1289 19.6133 54.1289 21.5664V36.8594C54.1289 38.8125 53.7578 40.4857 53.0156 41.8789C52.2865 43.2721 51.2253 44.3398 49.832 45.082C48.4518 45.8242 46.7721 46.1953 44.793 46.1953H33.0742L26.4336 52.0547C25.7044 52.6927 25.0729 53.1615 24.5391 53.4609C24.0182 53.7604 23.4583 53.9102 22.8594 53.9102ZM23.9141 49.0469L30.0859 42.9727C30.5156 42.5299 30.9193 42.237 31.2969 42.0938C31.6745 41.9375 32.1758 41.8594 32.8008 41.8594H44.5977C46.3424 41.8594 47.6445 41.4232 48.5039 40.5508C49.3633 39.6784 49.793 38.3828 49.793 36.6641V21.7422C49.793 20.0365 49.3633 18.7474 48.5039 17.875C47.6445 17.0026 46.3424 16.5664 44.5977 16.5664H19.3828C17.625 16.5664 16.3164 17.0026 15.457 17.875C14.6107 18.7474 14.1875 20.0365 14.1875 21.7422V36.6641C14.1875 38.3828 14.6107 39.6784 15.457 40.5508C16.3164 41.4232 17.625 41.8594 19.3828 41.8594H22.2344C22.8073 41.8594 23.2305 41.9896 23.5039 42.25C23.7773 42.4974 23.9141 42.9271 23.9141 43.5391V49.0469ZM22.4492 27.1914C22.4492 25.9935 22.8529 25.0104 23.6602 24.2422C24.4674 23.474 25.4701 23.0898 26.668 23.0898C28.0221 23.0898 29.1029 23.5716 29.9102 24.5352C30.7305 25.4857 31.1406 26.6576 31.1406 28.0508C31.1406 29.2096 30.9323 30.2383 30.5156 31.1367C30.112 32.0221 29.5911 32.7708 28.9531 33.3828C28.3281 33.9948 27.6771 34.457 27 34.7695C26.3229 35.082 25.7174 35.2383 25.1836 35.2383C24.8841 35.2383 24.6367 35.1536 24.4414 34.9844C24.2461 34.8151 24.1484 34.5938 24.1484 34.3203C24.1484 34.0859 24.2135 33.8906 24.3438 33.7344C24.487 33.5651 24.7214 33.4414 25.0469 33.3633C25.5677 33.2331 26.0625 33.0312 26.5312 32.7578C27.013 32.4714 27.4362 32.1328 27.8008 31.7422C28.1654 31.3385 28.4453 30.8828 28.6406 30.375H28.3867C28.1263 30.7005 27.7943 30.9284 27.3906 31.0586C26.987 31.1758 26.5573 31.2344 26.1016 31.2344C25.0078 31.2344 24.1224 30.8503 23.4453 30.082C22.7812 29.3008 22.4492 28.3372 22.4492 27.1914ZM33.0742 27.1914C33.0742 25.9935 33.4714 25.0104 34.2656 24.2422C35.0729 23.474 36.082 23.0898 37.293 23.0898C38.6471 23.0898 39.7279 23.5716 40.5352 24.5352C41.3555 25.4857 41.7656 26.6576 41.7656 28.0508C41.7656 29.2096 41.5573 30.2383 41.1406 31.1367C40.737 32.0221 40.2161 32.7708 39.5781 33.3828C38.9531 33.9948 38.2956 34.457 37.6055 34.7695C36.9284 35.082 36.3294 35.2383 35.8086 35.2383C35.5091 35.2383 35.2617 35.1536 35.0664 34.9844C34.8711 34.8151 34.7734 34.5938 34.7734 34.3203C34.7734 34.0859 34.8385 33.8906 34.9688 33.7344C35.112 33.5651 35.3529 33.4414 35.6914 33.3633C36.1992 33.2331 36.6875 33.0312 37.1562 32.7578C37.638 32.4714 38.0612 32.1328 38.4258 31.7422C38.7904 31.3385 39.0703 30.8828 39.2656 30.375H39.0117C38.7513 30.7005 38.4193 30.9284 38.0156 31.0586C37.612 31.1758 37.1823 31.2344 36.7266 31.2344C35.6328 31.2344 34.7474 30.8503 34.0703 30.082C33.4062 29.3008 33.0742 28.3372 33.0742 27.1914Z";
-    private static final String ICON_LYRICS_ON_AMLL_0 = "M1.91256 7.67068C0 11.0858 0 15.6405 0 24.75V39.25C0 48.3595 0 52.9142 1.91256 56.3293C3.26425 58.7429 5.25707 60.7357 7.67068 62.0874C11.0858 64 15.6405 64 24.75 64H39.25C48.3595 64 52.9142 64 56.3293 62.0874C58.7429 60.7357 60.7357 58.7429 62.0874 56.3293C64 52.9142 64 48.3595 64 39.25V24.75C64 15.6405 64 11.0858 62.0874 7.67068C60.7357 5.25707 58.7429 3.26425 56.3293 1.91256C52.9142 0 48.3595 0 39.25 0H24.75C15.6405 0 11.0858 0 7.67068 1.91256C5.25707 3.26425 3.26425 5.25707 1.91256 7.67068ZM20.8281 53.0703C21.3229 53.6302 22 53.9102 22.8594 53.9102C23.4583 53.9102 24.0182 53.7604 24.5391 53.4609C25.0729 53.1615 25.7044 52.6927 26.4336 52.0547L33.0742 46.1953H44.793C46.7721 46.1953 48.4518 45.8242 49.832 45.082C51.2253 44.3398 52.2865 43.2721 53.0156 41.8789C53.7578 40.4857 54.1289 38.8125 54.1289 36.8594V21.5664C54.1289 19.6133 53.7578 17.9401 53.0156 16.5469C52.2865 15.1536 51.2253 14.0859 49.832 13.3438C48.4518 12.5885 46.7721 12.2109 44.793 12.2109H19.1875C17.2214 12.2109 15.5417 12.5885 14.1484 13.3438C12.7552 14.0859 11.6875 15.1536 10.9453 16.5469C10.2161 17.9401 9.85156 19.6133 9.85156 21.5664V36.8594C9.85156 38.8125 10.2227 40.4857 10.9648 41.8789C11.7201 43.2721 12.7812 44.3398 14.1484 45.082C15.5156 45.8242 17.1237 46.1953 18.9727 46.1953H20.1055V50.8242C20.1055 51.7617 20.3464 52.5104 20.8281 53.0703Z";
-    private static final String ICON_LYRICS_ON_AMLL_1 = "M22.4492 27.1914C22.4492 25.9935 22.8529 25.0104 23.6602 24.2422C24.4674 23.474 25.4701 23.0898 26.668 23.0898C28.0221 23.0898 29.1029 23.5716 29.9102 24.5352C30.7305 25.4857 31.1406 26.6576 31.1406 28.0508C31.1406 29.2096 30.9323 30.2383 30.5156 31.1367C30.112 32.0221 29.5911 32.7708 28.9531 33.3828C28.3281 33.9948 27.6771 34.457 27 34.7695C26.3229 35.082 25.7174 35.2383 25.1836 35.2383C24.8841 35.2383 24.6367 35.1536 24.4414 34.9844C24.2461 34.8151 24.1484 34.5938 24.1484 34.3203C24.1484 34.0859 24.2135 33.8906 24.3438 33.7344C24.487 33.5651 24.7214 33.4414 25.0469 33.3633C25.5677 33.2331 26.0625 33.0312 26.5312 32.7578C27.013 32.4714 27.4362 32.1328 27.8008 31.7422C28.1654 31.3385 28.4453 30.8828 28.6406 30.375H28.3867C28.1263 30.7005 27.7943 30.9284 27.3906 31.0586C26.987 31.1758 26.5573 31.2344 26.1016 31.2344C25.0078 31.2344 24.1224 30.8503 23.4453 30.082C22.7812 29.3008 22.4492 28.3372 22.4492 27.1914ZM33.0742 27.1914C33.0742 25.9935 33.4714 25.0104 34.2656 24.2422C35.0729 23.474 36.082 23.0898 37.293 23.0898C38.6471 23.0898 39.7279 23.5716 40.5352 24.5352C41.3555 25.4857 41.7656 26.6576 41.7656 28.0508C41.7656 29.2096 41.5573 30.2383 41.1406 31.1367C40.737 32.0221 40.2161 32.7708 39.5781 33.3828C38.9531 33.9948 38.2956 34.457 37.6055 34.7695C36.9284 35.082 36.3294 35.2383 35.8086 35.2383C35.5091 35.2383 35.2617 35.1536 35.0664 34.9844C34.8711 34.8151 34.7734 34.5938 34.7734 34.3203C34.7734 34.0859 34.8385 33.8906 34.9688 33.7344C35.112 33.5651 35.3529 33.4414 35.6914 33.3633C36.1992 33.2331 36.6875 33.0312 37.1562 32.7578C37.638 32.4714 38.0612 32.1328 38.4258 31.7422C38.7904 31.3385 39.0703 30.8828 39.2656 30.375H39.0117C38.7513 30.7005 38.4193 30.9284 38.0156 31.0586C37.612 31.1758 37.1823 31.2344 36.7266 31.2344C35.6328 31.2344 34.7474 30.8503 34.0703 30.082C33.4062 29.3008 33.0742 28.3372 33.0742 27.1914Z";
-    private static final String ICON_PLAYLIST_OFF_AMLL = "M23.9922 21.8594C23.4062 21.8594 22.9115 21.6641 22.5078 21.2734C22.1172 20.8698 21.9219 20.375 21.9219 19.7891C21.9219 19.2161 22.1172 18.7279 22.5078 18.3242C22.9115 17.9206 23.4062 17.7188 23.9922 17.7188H50.418C50.9909 17.7188 51.4792 17.9206 51.8828 18.3242C52.2865 18.7279 52.4883 19.2161 52.4883 19.7891C52.4883 20.375 52.2865 20.8698 51.8828 21.2734C51.4792 21.6641 50.9909 21.8594 50.418 21.8594H23.9922ZM23.9922 33.9883C23.4062 33.9883 22.9115 33.7865 22.5078 33.3828C22.1172 32.9792 21.9219 32.4909 21.9219 31.918C21.9219 31.3451 22.1172 30.8633 22.5078 30.4727C22.9115 30.069 23.4062 29.8672 23.9922 29.8672H50.418C50.9909 29.8672 51.4792 30.069 51.8828 30.4727C52.2865 30.8633 52.4883 31.3451 52.4883 31.918C52.4883 32.5039 52.2865 32.9987 51.8828 33.4023C51.4792 33.793 50.9909 33.9883 50.418 33.9883H23.9922ZM23.9922 46.1172C23.4062 46.1172 22.9115 45.9219 22.5078 45.5312C22.1172 45.1276 21.9219 44.6328 21.9219 44.0469C21.9219 43.474 22.1172 42.9857 22.5078 42.582C22.9115 42.1784 23.4062 41.9766 23.9922 41.9766H50.418C50.9909 41.9766 51.4792 42.1784 51.8828 42.582C52.2865 42.9857 52.4883 43.474 52.4883 44.0469C52.4883 44.6328 52.2865 45.1276 51.8828 45.5312C51.4792 45.9219 50.9909 46.1172 50.418 46.1172H23.9922ZM14.4805 22.7383C13.6602 22.7383 12.957 22.4518 12.3711 21.8789C11.7982 21.306 11.5117 20.6094 11.5117 19.7891C11.5117 18.9688 11.7982 18.2721 12.3711 17.6992C12.957 17.1263 13.6602 16.8398 14.4805 16.8398C15.2878 16.8398 15.9844 17.1263 16.5703 17.6992C17.1562 18.2721 17.4492 18.9688 17.4492 19.7891C17.4492 20.6094 17.1562 21.306 16.5703 21.8789C15.9844 22.4518 15.2878 22.7383 14.4805 22.7383ZM14.4805 34.8867C13.6602 34.8867 12.957 34.5938 12.3711 34.0078C11.7982 33.4219 11.5117 32.7253 11.5117 31.918C11.5117 31.1107 11.7982 30.4141 12.3711 29.8281C12.957 29.2422 13.6602 28.9492 14.4805 28.9492C15.2878 28.9492 15.9844 29.2422 16.5703 29.8281C17.1562 30.4141 17.4492 31.1107 17.4492 31.918C17.4492 32.7253 17.1562 33.4219 16.5703 34.0078C15.9844 34.5938 15.2878 34.8867 14.4805 34.8867ZM14.4805 47.0156C13.6602 47.0156 12.957 46.7227 12.3711 46.1367C11.7982 45.5638 11.5117 44.8672 11.5117 44.0469C11.5117 43.2266 11.7982 42.5299 12.3711 41.957C12.957 41.3841 13.6602 41.0977 14.4805 41.0977C15.2878 41.0977 15.9844 41.3841 16.5703 41.957C17.1562 42.5299 17.4492 43.2266 17.4492 44.0469C17.4492 44.8672 17.1562 45.5638 16.5703 46.1367C15.9844 46.7227 15.2878 47.0156 14.4805 47.0156Z";
-    private static final String ICON_PLAYLIST_ON_AMLL = "M1.91256 7.67068C0 11.0858 0 15.6405 0 24.75V39.25C0 48.3595 0 52.9142 1.91256 56.3293C3.26425 58.7429 5.25707 60.7357 7.67068 62.0874C11.0858 64 15.6405 64 24.75 64H39.25C48.3595 64 52.9142 64 56.3293 62.0874C58.7429 60.7357 60.7357 58.7429 62.0874 56.3293C64 52.9142 64 48.3595 64 39.25V24.75C64 15.6405 64 11.0858 62.0874 7.67068C60.7357 5.25706 58.7429 3.26425 56.3293 1.91256C52.9142 0 48.3595 0 39.25 0H24.75C15.6405 0 11.0858 0 7.67068 1.91256C5.25707 3.26425 3.26425 5.25706 1.91256 7.67068ZM22.5078 21.2734C22.9115 21.6641 23.4062 21.8594 23.9922 21.8594H50.418C50.9909 21.8594 51.4792 21.6641 51.8828 21.2734C52.2865 20.8698 52.4883 20.375 52.4883 19.7891C52.4883 19.2161 52.2865 18.7279 51.8828 18.3242C51.4792 17.9206 50.9909 17.7188 50.418 17.7188H23.9922C23.4062 17.7188 22.9115 17.9206 22.5078 18.3242C22.1172 18.7279 21.9219 19.2161 21.9219 19.7891C21.9219 20.375 22.1172 20.8698 22.5078 21.2734ZM22.5078 33.3828C22.9115 33.7865 23.4062 33.9883 23.9922 33.9883H50.418C50.9909 33.9883 51.4792 33.793 51.8828 33.4023C52.2865 32.9987 52.4883 32.5039 52.4883 31.918C52.4883 31.3451 52.2865 30.8633 51.8828 30.4727C51.4792 30.069 50.9909 29.8672 50.418 29.8672H23.9922C23.4062 29.8672 22.9115 30.069 22.5078 30.4727C22.1172 30.8633 21.9219 31.3451 21.9219 31.918C21.9219 32.4909 22.1172 32.9792 22.5078 33.3828ZM22.5078 45.5312C22.9115 45.9219 23.4062 46.1172 23.9922 46.1172H50.418C50.9909 46.1172 51.4792 45.9219 51.8828 45.5312C52.2865 45.1276 52.4883 44.6328 52.4883 44.0469C52.4883 43.474 52.2865 42.9857 51.8828 42.582C51.4792 42.1784 50.9909 41.9766 50.418 41.9766H23.9922C23.4062 41.9766 22.9115 42.1784 22.5078 42.582C22.1172 42.9857 21.9219 43.474 21.9219 44.0469C21.9219 44.6328 22.1172 45.1276 22.5078 45.5312ZM12.3711 21.8789C12.957 22.4518 13.6602 22.7383 14.4805 22.7383C15.2878 22.7383 15.9844 22.4518 16.5703 21.8789C17.1562 21.306 17.4492 20.6094 17.4492 19.7891C17.4492 18.9688 17.1562 18.2721 16.5703 17.6992C15.9844 17.1263 15.2878 16.8398 14.4805 16.8398C13.6602 16.8398 12.957 17.1263 12.3711 17.6992C11.7982 18.2721 11.5117 18.9688 11.5117 19.7891C11.5117 20.6094 11.7982 21.306 12.3711 21.8789ZM12.3711 34.0078C12.957 34.5938 13.6602 34.8867 14.4805 34.8867C15.2878 34.8867 15.9844 34.5938 16.5703 34.0078C17.1562 33.4219 17.4492 32.7253 17.4492 31.918C17.4492 31.1107 17.1562 30.4141 16.5703 29.8281C15.9844 29.2422 15.2878 28.9492 14.4805 28.9492C13.6602 28.9492 12.957 29.2422 12.3711 29.8281C11.7982 30.4141 11.5117 31.1107 11.5117 31.918C11.5117 32.7253 11.7982 33.4219 12.3711 34.0078ZM12.3711 46.1367C12.957 46.7227 13.6602 47.0156 14.4805 47.0156C15.2878 47.0156 15.9844 46.7227 16.5703 46.1367C17.1562 45.5638 17.4492 44.8672 17.4492 44.0469C17.4492 43.2266 17.1562 42.5299 16.5703 41.957C15.9844 41.3841 15.2878 41.0977 14.4805 41.0977C13.6602 41.0977 12.957 41.3841 12.3711 41.957C11.7982 42.5299 11.5117 43.2266 11.5117 44.0469C11.5117 44.8672 11.7982 45.5638 12.3711 46.1367Z";
     private SkijaRenderer renderer;
     private SkijaRenderer bgRenderer;
     private AMLLFluidBackground.GuiRenderer gpuBackground;
@@ -171,6 +157,7 @@ public class Musicpage extends Screen {
     private float progressBounceX;
     private float volumeBounceX;
     private SkijaRenderer interludeDotRenderer;
+    private int bakedBlurBudgetThisFrame;
     private float interludeDotScale = -1f;
     private float interludeY;
     private float interludeVelocityY;
@@ -257,6 +244,7 @@ public class Musicpage extends Screen {
         dirty = true;
         controlsLayerDirty = true;
         lyricsLayerDirty = true;
+        syncTrackIndexToPlaying();
         clampTrackIndex();
         refreshTrackCache();
         ensureInterludeDotRenderer(pageScale());
@@ -424,8 +412,9 @@ public class Musicpage extends Screen {
 
     private void renderLyricsLayer(long now, float dt) {
         if (lyricsRenderer == null) return;
-        renderer = lyricsRenderer;
-        renderer.clear(0x00000000);
+        		renderer = lyricsRenderer;
+        		renderer.clear(0x00000000);
+        		bakedBlurBudgetThisFrame = 0;
         if (currentUiTrack == null) {
             renderer.upload();
             return;
@@ -474,6 +463,7 @@ public class Musicpage extends Screen {
 
     private void renderAMLLStatic(MusicLoader.MusicTrack track, Typeface tf, long now) {
         float s = pageScale();
+        float infoSize = amllMusicInfoFontSize();
         float leftW = amllHorizontalLayoutMaxWidth();
         HorizontalGrid grid = amllHorizontalGrid(leftW);
         float infoColumnW = amllHorizontalInfoColumnWidth();
@@ -483,7 +473,6 @@ public class Musicpage extends Screen {
         float leftX = baseLeftX;
         float coverSize = leftW;
         float coverY = grid.coverY();
-        float infoSize = amllMusicInfoFontSize();
         float infoBlockH = amllMusicInfoBlockHeight(infoSize);
         float progressBlockH = amllProgressBlockHeight(track.qualityLabel());
         float mediaBlockH = amllMediaButtonSize(leftW);
@@ -652,8 +641,9 @@ public class Musicpage extends Screen {
         float buttonSize = amllMediaButtonSize(w);
         float hoverR = buttonSize * 0.5f;
         float toggleSize = amllMediaToggleIconSize();
-        float transportSize = amllMediaIconSize(32f, false);
-        float playSize = amllMediaIconSize(38f, true);
+        float transportSize = Math.min(amllMediaIconSize(32f, false), buttonSize * 0.92f);
+        float playSize = Math.min(amllMediaIconSize(38f, true), buttonSize * 0.92f);
+        toggleSize = Math.min(toggleSize, buttonSize * 0.58f);
         btnR = hoverR;
         float buttonsY = y + buttonSize * 0.5f;
         modeX = x + w * 0.09f;
@@ -748,39 +738,97 @@ public class Musicpage extends Screen {
         float inactivePreferred = amllInactiveLyricFontSize(activePreferred);
         ensureLyricCache(tf, w, activePreferred, inactivePreferred, s);
 
-        float gap = amllLyricLineGap(s);
-        float cumY = 0f;
-        int count = lyricLines.size();
-        float[] offsets = new float[count];
-        for (int i = 0; i < count; i++) {
-            offsets[i] = cumY;
-            cumY += getLineContentHeight(i, active, s) + gap;
-        }
-
-        float anchorY = layoutLyricAnchorY > 0f ? layoutLyricAnchorY : y + h * 0.35f;
-
         Canvas c = renderer.canvas();
         c.save();
-        c.clipRect(Rect.makeXYWH(x - 18f * s, lyricsLayerY, w + 36f * s, lyricsLayerH));
-        float baseY = anchorY - scrollBase;
-        for (int i = 0; i < count; i++) {
-            float lineY = baseY + offsets[i];
-            CachedLyricLine cached = i < lyricCache.size() ? lyricCache.get(i) : null;
-            if (cached == null) continue;
-
-            boolean isActive = i == active;
-            float lineH = getLineContentHeight(i, active, s);
-
-            if (lineY + lineH + 30f * s < lyricsLayerY || lineY - 30f * s > lyricsLayerY + lyricsLayerH) continue;
-
-            float textX = x;
-            if (isActive) {
-                renderer.canvas().drawImageRect(cached.activeImage, Rect.makeXYWH(textX - cached.activePad, lineY - cached.activePad, cached.activeW, cached.activeH));
-            } else {
-                renderer.canvas().drawImageRect(cached.inactiveImage, Rect.makeXYWH(textX - cached.inactivePad, lineY - cached.inactivePad, cached.inactiveW, cached.inactiveH));
-            }
+        float padX = amllLyricLinePaddingX(activePreferred);
+        c.clipRect(Rect.makeXYWH(x - padX, lyricsLayerY, w + padX * 2f, lyricsLayerH));
+        for (int i = 0; i < lyricCache.size(); i++) {
+            CachedLyricLine cached = lyricCache.get(i);
+            if (cached == null || !cached.initialized) continue;
+            drawAMLLLyricLineToLayer(c, cached, i, active, x, w);
         }
+        blitInterludeDotsToLayer(c, s, x - padX, lyricsLayerY, w + padX * 2f, lyricsLayerH);
         c.restore();
+    }
+
+    private void drawAMLLLyricLineToLayer(Canvas c, CachedLyricLine line, int index, int active, float x, float w) {
+        boolean isActive = isActiveLine(index, active);
+        Image image = isActive ? line.activeImage : line.inactiveImage;
+        if (image == null) return;
+        float alpha = clamp(line.currentOpacity, 0f, 1f);
+        if (alpha <= 0.01f) return;
+        float scale = clamp(line.currentScale, 0.86f, 1.08f);
+        float texW = isActive ? line.activeW : line.inactiveW;
+        float texH = isActive ? line.activeH : line.inactiveH;
+        float pad = isActive ? line.activePad : line.inactivePad;
+        float contentH = Math.max(1f, texH - pad * 2f);
+        float rawX = x - pad;
+        if (line.lineRef != null && line.lineRef.isDuet()) rawX = x + w - texW + pad;
+        float rawY = line.currentY - pad;
+        float originX = x;
+        float originY = line.currentY + contentH * 0.5f;
+        float drawX = originX + (rawX - originX) * scale;
+        float drawY = originY + (rawY - originY) * scale;
+        float drawW = texW * scale;
+        float drawH = texH * scale;
+        alpha *= amllLyricEdgeMaskAlpha(drawY, drawH, layoutLyricTop, layoutLyricH);
+        if (alpha <= 0.01f) return;
+        float blurLevel = line.currentBlurVisual;
+        try (Paint paint = new Paint()) {
+            paint.setAntiAlias(true);
+            paint.setColor(withAlpha(WHITE, alpha));
+            			int targetStep = amllBlurStep(blurLevel);
+            			boolean alreadyBaked = line.bakedBlurImage != null && line.bakedBlurStep == targetStep;
+            			boolean canBake = alreadyBaked || bakedBlurBudgetThisFrame < 1;
+            			if (shouldUseAMLLLineBlur(isActive, blurLevel) && canBake && ensureBakedBlur(line, image, texW, texH, blurLevel)) {
+            				if (!alreadyBaked) bakedBlurBudgetThisFrame++;
+            				float bakedPad = line.bakedBlurPad * scale;
+            				c.drawImageRect(line.bakedBlurImage, Rect.makeXYWH(drawX - bakedPad, drawY - bakedPad, line.bakedBlurW * scale, line.bakedBlurH * scale), paint);
+            			} else {
+            				c.drawImageRect(image, Rect.makeXYWH(drawX, drawY, drawW, drawH), paint);
+            			}
+        }
+    }
+
+    private boolean ensureBakedBlur(CachedLyricLine line, Image source, float sourceW, float sourceH, float blurLevel) {
+        if (line == null || source == null) return false;
+        int step = amllBlurStep(blurLevel);
+        if (step <= 0) return false;
+        float radius = amllBlurRadiusForStep(step);
+        float pad = Math.max(2f, radius * 3f);
+        float logicalW = Math.max(1f, sourceW + pad * 2f);
+        float logicalH = Math.max(1f, sourceH + pad * 2f);
+        if (line.bakedBlurImage != null && line.bakedBlurRenderer != null && line.bakedBlurStep == step && Math.abs(line.bakedBlurW - logicalW) < 0.5f && Math.abs(line.bakedBlurH - logicalH) < 0.5f && Math.abs(line.bakedBlurPad - pad) < 0.05f) return true;
+
+        line.clearBakedBlur();
+        int imgW = Math.max(1, Math.round(logicalW * guiScale));
+        int imgH = Math.max(1, Math.round(logicalH * guiScale));
+        SkijaRenderer bakedRenderer = new SkijaRenderer("music_page_lyric_blur", imgW, imgH);
+        boolean transferred = false;
+        try {
+            bakedRenderer.clear(0x00000000);
+            Canvas bc = bakedRenderer.canvas();
+            bc.save();
+            bc.scale(guiScale, guiScale);
+            try (Paint paint = new Paint(); ImageFilter blur = ImageFilter.makeBlur(radius, radius, FilterTileMode.DECAL)) {
+                paint.setAntiAlias(true);
+                paint.setColor(WHITE);
+                paint.setImageFilter(blur);
+                bc.drawImageRect(source, Rect.makeXYWH(pad, pad, sourceW, sourceH), paint);
+            }
+            bc.restore();
+            bakedRenderer.upload();
+            line.bakedBlurRenderer = bakedRenderer;
+            line.bakedBlurImage = bakedRenderer.getSurface().makeImageSnapshot();
+            line.bakedBlurW = logicalW;
+            line.bakedBlurH = logicalH;
+            line.bakedBlurPad = pad;
+            line.bakedBlurStep = step;
+            transferred = true;
+            return true;
+        } finally {
+            if (!transferred) bakedRenderer.close();
+        }
     }
 
     private float getLineContentHeight(int index, int activeIndex, float s) {
@@ -836,8 +884,7 @@ public class Musicpage extends Screen {
             TextImage active = createLyricTextImage(line, tf, activeSize, WHITE, 0f, false, maxWidth, false, 0f);
             TextImage inactive = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
             TextImage hover = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
-            TextImage blurred = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, amllMaxLineBlurPad(s));
-            CachedLyricLine cached = new CachedLyricLine(active, inactive, hover, blurred);
+            CachedLyricLine cached = new CachedLyricLine(active, inactive, hover);
             cached.lineRef = line;
             if (line.isDynamic()) {
                 cached.setDynamicWordRanges(measureDynamicWordRanges(line, tf, activeSize, maxWidth));
@@ -1379,11 +1426,13 @@ public class Musicpage extends Screen {
         if (tf != null && layoutRightW > 1f) {
             float activePreferred = amllLyricFontSize();
             float inactivePreferred = amllInactiveLyricFontSize(activePreferred);
-            if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) lyricSnapOnNextRender = true;
+            if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
+                lyricSnapOnNextRender = true;
+                if (!useLineLyricTextures()) lyricsLayerDirty = true;
+            }
         }
         boolean snap = lyricSnapOnNextRender;
         InterludeState interlude = computeInterlude(active, currentSeconds);
-        updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude);
         float targetScroll = lyricScrollTarget(active, s, interlude);
         if (snap) {
             lyricScroll = targetScroll;
@@ -1391,25 +1440,34 @@ public class Musicpage extends Screen {
         } else {
             updateLyricSpring(active, targetScroll, dt, interlude.active());
         }
-        lyricLayerBlitOffsetY = lyricRenderScroll - lyricScroll;
-        if (!useLineLyricTextures()) {
-            float safeOffset = Math.max(38f * s, Math.min(lyricsLayerH * 0.22f, 88f * s));
-            if (Math.abs(lyricLayerBlitOffsetY) > safeOffset) lyricsLayerDirty = true;
-        }
+        lyricLayerBlitOffsetY = useLineLyricTextures() ? 0f : lyricRenderScroll - lyricScroll;
         updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude);
+        if (!useLineLyricTextures() && lyricLayerAnimating()) lyricsLayerDirty = true;
         lyricSnapOnNextRender = false;
     }
 
-    private float lyricScrollTarget(int active, float s, InterludeState interlude) {
-        float gap = amllLyricLineGap(s);
-        float target = 0f;
-        int count = Math.min(Math.max(active, 0), lyricLines.size());
-        float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
-        for (int i = 0; i < count; i++) {
-            if (isAttachedBgLine(i)) continue;
-            target += getLyricGroupHeight(i, active, s) + gap;
-            if (interlude.active() && i == interlude.anchor()) target += slotHeight;
+    private boolean lyricLayerAnimating() {
+        if (Math.abs(lyricScrollVelocity) > 0.01f) return true;
+        if (interludeOpacity > 0.001f && currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack)) return true;
+        for (CachedLyricLine line : lyricCache) {
+            if (line == null) continue;
+            if (Math.abs(line.velocityY) > 0.01f) return true;
+            if (Math.abs(line.velocityScale) > 0.0005f) return true;
+            if (Math.abs(line.velocityOpacity) > 0.0005f) return true;
+            if (Math.abs(line.velocityBlur) > 0.001f) return true;
         }
+        return false;
+    }
+
+    private float lyricScrollTarget(int active, float s, InterludeState interlude) {
+        		float target = 0f;
+        		int count = Math.min(Math.max(active, 0), lyricLines.size());
+        		float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
+        		for (int i = 0; i < count; i++) {
+        			if (isAttachedBgLine(i)) continue;
+        			target += getLyricGroupHeight(i, active, s);
+        			if (interlude.active() && i == interlude.anchor()) target += slotHeight;
+        		}
         if (active >= 0 && active < lyricLines.size()) target += getLyricGroupHeight(active, active, s) * 0.5f;
         return target;
     }
@@ -1446,7 +1504,6 @@ public class Musicpage extends Screen {
         if (lyricCache.size() != lyricLines.size()) return;
         float safeDt = clamp(dt, 0f, 0.05f);
         SpringParams params = lyricSpringParams(active, interlude.active());
-        float gap = amllLyricLineGap(s);
         float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
         boolean showDots = interlude.active();
         float anchorY = layoutLyricAnchorY > 0f ? layoutLyricAnchorY : layoutLyricTop + layoutLyricH * 0.35f;
@@ -1482,9 +1539,9 @@ public class Musicpage extends Screen {
                 if (groupActive) groupH += bgH;
             }
 
-            offsetY += groupH + gap;
-            if (interlude.active() && !dotsPlaced && i == interlude.anchor()) {
-                updateInterludeAnimation(showDots ? baseY + offsetY - gap * 0.5f : interludeY, showDots, s, safeDt, snap);
+            			offsetY += groupH;
+            			if (interlude.active() && !dotsPlaced && i == interlude.anchor()) {
+                updateInterludeAnimation(showDots ? baseY + offsetY : interludeY, showDots, s, safeDt, snap);
                 offsetY += slotHeight;
                 dotsPlaced = true;
             }
@@ -1618,7 +1675,7 @@ public class Musicpage extends Screen {
 
 
     private float interludeSlotHeight(float s) {
-        return amllInterludeDotSize() + amllInterludeDotPaddingY() * 2f;
+        return amllInterludeDotSize() + amllInterludeDotMargin() * 2f;
     }
 
     private void updateInterludeAnimation(float targetY, boolean visible, float s, float dt, boolean snap) {
@@ -1656,13 +1713,21 @@ public class Musicpage extends Screen {
         boolean isBG = lyricLines.get(index).isBG();
         boolean nonDynamic = isNonDynamicLyrics();
 
+        boolean groupActive = isAMLLGroupActive(groupIndex);
+
         if (isBG) {
-            return new LyricPresentation(hasBuffered ? 0.4f : 0.0001f, hasBuffered ? 1f : 0.8f);
+            return new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.75f);
         }
 
-        float opacity = hasBuffered ? 0.85f : (nonDynamic ? 0.20f : 1f);
-        float scale = (!hasBuffered && playing) ? 0.97f : 1f;
+        float opacity = hasBuffered ? 0.85f : (nonDynamic ? 0.2f : 1f);
+        float scale = (!groupActive && playing) ? 0.97f : 1f;
         return new LyricPresentation(opacity, scale);
+    }
+
+    private boolean isAMLLGroupActive(int groupIndex) {
+        if (amllBufferedGroups.contains(groupIndex)) return true;
+        int latest = maxSet(amllBufferedGroups, amllScrollToIndex);
+        return groupIndex >= amllScrollToIndex && groupIndex < latest;
     }
 
     private boolean isNonDynamicLyrics() {
@@ -1949,7 +2014,10 @@ public class Musicpage extends Screen {
     private void updateLyricsHover(float mx, float my) {
         float padX = amllLyricLinePaddingX(amllLyricFontSize());
         boolean hover = lyricsVisible && inside(mx, my, layoutRightX - padX, layoutLyricTop, layoutRightW + padX * 2f, layoutLyricH);
-        if (hoveredLyrics != hover) hoveredLyrics = hover;
+        if (hoveredLyrics != hover) {
+            hoveredLyrics = hover;
+            if (!useLineLyricTextures()) lyricsLayerDirty = true;
+        }
     }
 
     @Override
@@ -2776,6 +2844,12 @@ public class Musicpage extends Screen {
         return min == Integer.MAX_VALUE ? 0 : min;
     }
 
+    private int maxSet(Set<Integer> values, int fallback) {
+        int max = Integer.MIN_VALUE;
+        for (Integer value : values) if (value != null && value > max) max = value;
+        return max == Integer.MIN_VALUE ? fallback : max;
+    }
+
     private int lastMainLineIndex() {
         for (int i = lyricLines.size() - 1; i >= 0; i--) {
             if (!isAttachedBgLine(i)) return i;
@@ -2857,37 +2931,6 @@ public class Musicpage extends Screen {
         return Math.max(0f, Math.min(1f, (now - exitStartedAt) / (float) CLOSE_ANIM_MS));
     }
 
-    private float easeOutCubic(float t) {
-        t = clamp(t, 0f, 1f);
-        float u = 1f - t;
-        return 1f - u * u * u;
-    }
-
-    private float easeInOut(float t) {
-        t = clamp(t, 0f, 1f);
-        return t < 0.5f ? 2f * t * t : 1f - (float) Math.pow(-2f * t + 2f, 2f) * 0.5f;
-    }
-
-    private float easeInOutBack(float t) {
-        t = clamp(t, 0f, 1f);
-        float c2 = 1.70158f * 1.525f;
-        if (t < 0.5f) return (float) Math.pow(2f * t, 2f) * ((c2 + 1f) * 2f * t - c2) * 0.5f;
-        return ((float) Math.pow(2f * t - 2f, 2f) * ((c2 + 1f) * (t * 2f - 2f) + c2) + 2f) * 0.5f;
-    }
-
-    private float easeOutExpo(float t) {
-        t = clamp(t, 0f, 1f);
-        return t == 1f ? 1f : 1f - (float) Math.pow(2f, -10f * t);
-    }
-
-    private float clamp01(float v) {
-        return clamp(v, 0f, 1f);
-    }
-
-    private float clampPositive(float v) {
-        return Math.max(0f, v);
-    }
-
     private void blitBackgroundRenderer(GuiGraphicsExtractor g) {
         if (gpuBackground != null && gpuBackground.draw(g, width, height, backgroundRenderTime, backgroundLowFreqPulse)) {
             drawAMLLBackgroundOverlay(g);
@@ -2950,6 +2993,7 @@ public class Musicpage extends Screen {
                     new int[]{withAlpha(WHITE, cached.currentBrightAlpha), withAlpha(WHITE, cached.currentDarkAlpha)})) {
                 gradientPaint.setAntiAlias(true);
                 gradientPaint.setBlendMode(io.github.humbleui.skija.BlendMode.SRC_IN);
+                gradientPaint.setShader(shader);
                 if (activeRange == null) {
                     gradientPaint.setColor(withAlpha(WHITE, cached.currentBrightAlpha));
                     c.drawRect(Rect.makeXYWH(0, 0, w, h), gradientPaint);
@@ -3265,7 +3309,8 @@ public class Musicpage extends Screen {
             InterludeState interlude = computeInterlude(active, currentSeconds);
             updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude);
         }
-        if (lyricCache.size() != lyricLines.size() || lyricCache.isEmpty()) return false;
+        if (lyricCache.size() != lyricLines.size()) return false;
+        if (lyricCache.isEmpty()) return true;
 
         float currentSecondsDyn = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
         if (active >= 0 && active < lyricCache.size()) {
@@ -3282,20 +3327,25 @@ public class Musicpage extends Screen {
         float clipY = layoutLyricTop;
         float clipW = layoutRightW + amllLyricLinePaddingX(activePreferred) * 2f;
         float clipH = layoutLyricH;
+        float overscan = amllCssPx(300f);
+        float overscanTop = clipY - overscan;
+        float overscanBottom = clipY + clipH + overscan;
+        boolean allowNewBlurBake = !lyricLayerAnimating();
+        bakedBlurBudgetThisFrame = 0;
         for (int i = 0; i < lyricCache.size(); i++) {
             CachedLyricLine line = lyricCache.get(i);
             boolean isActive = isActiveLine(i, active);
-            boolean sharpen = hoveredLyrics && !isActive;
             float blurLevel = line.currentBlurVisual;
-            boolean useBlur = blurLevel > 0.001f && !hoveredLyrics && !isActive;
-            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : useBlur ? rendererForAMLLLineBlur(line, blurLevel) : sharpen ? line.hoverRenderer : line.inactiveRenderer;
+            boolean useBlur = shouldUseAMLLLineBlur(isActive, blurLevel);
+            SkijaRenderer lineRenderer = isActive ? line.activeRenderer : line.inactiveRenderer;
+            Image lineImage = isActive ? line.activeImage : line.inactiveImage;
             if (lineRenderer == null || !line.initialized) continue;
             float alpha = clamp(line.currentOpacity * globalAlpha, 0f, 1f);
             if (alpha <= 0.01f) continue;
             float scale = clamp(line.currentScale, 0.86f, 1.08f);
-            float texW = isActive ? line.activeW : useBlur ? line.blurW : sharpen ? line.hoverW : line.inactiveW;
-            float texH = isActive ? line.activeH : useBlur ? line.blurH : sharpen ? line.hoverH : line.inactiveH;
-            float pad = isActive ? line.activePad : useBlur ? line.blurPad : sharpen ? line.hoverPad : line.inactivePad;
+            float texW = isActive ? line.activeW : line.inactiveW;
+            float texH = isActive ? line.activeH : line.inactiveH;
+            float pad = isActive ? line.activePad : line.inactivePad;
             float contentH = Math.max(1f, texH - pad * 2f);
             float rawX = layoutRightX - pad;
             if (line.lineRef != null && line.lineRef.isDuet()) {
@@ -3308,6 +3358,20 @@ public class Musicpage extends Screen {
             float drawY = originY + (rawY - originY) * scale;
             float drawW = texW * scale;
             float drawH = texH * scale;
+            if (drawY + drawH < overscanTop || drawY > overscanBottom) continue;
+            alpha *= amllLyricEdgeMaskAlpha(drawY, drawH, clipY, clipH);
+            if (alpha <= 0.01f) continue;
+            if (useBlur) {
+                int targetStep = amllBlurStep(blurLevel);
+                boolean alreadyBaked = line.bakedBlurImage != null && line.bakedBlurRenderer != null && line.bakedBlurStep == targetStep;
+                boolean canBake = alreadyBaked || (allowNewBlurBake && bakedBlurBudgetThisFrame < 1);
+                if (canBake && ensureBakedBlur(line, lineImage, texW, texH, blurLevel)) {
+                    if (!alreadyBaked) bakedBlurBudgetThisFrame++;
+                    float bakedPad = line.bakedBlurPad * scale;
+                    blitRendererClippedAlpha(g, line.bakedBlurRenderer, drawX - bakedPad, drawY - bakedPad, line.bakedBlurW * scale, line.bakedBlurH * scale, alpha, clipX, clipY, clipW, clipH);
+                    continue;
+                }
+            }
             blitRendererClippedAlpha(g, lineRenderer, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH);
         }
         blitInterludeDots(g, s, clipX, clipY, clipW, clipH, globalAlpha);
@@ -3318,43 +3382,76 @@ public class Musicpage extends Screen {
         return computeAMLLLineBlur(groupMainIndex(index));
     }
 
+    private float amllLyricEdgeMaskAlpha(float y, float h, float clipY, float clipH) {
+        float fade = Math.max(1f, clipH * 0.10f);
+        float center = y + h * 0.5f;
+        float top = clamp((center - clipY) / fade, 0f, 1f);
+        float bottom = clamp((clipY + clipH - center) / fade, 0f, 1f);
+        return Math.min(top, bottom);
+    }
+
     private float computeAMLLLineBlur(int index) {
         int groupIndex = groupMainIndex(index);
-        if (amllBufferedGroups.contains(groupIndex) || amllHotGroups.contains(groupIndex) || hoveredLyrics) return 0f;
-        int latest = amllBufferedGroups.isEmpty() ? amllScrollToIndex : minSet(amllBufferedGroups);
+        if (isAMLLGroupActive(groupIndex)) return 0f;
+        int latest = maxSet(amllBufferedGroups, amllScrollToIndex);
         float blur = 1f;
         if (groupIndex < amllScrollToIndex) blur += Math.abs(amllScrollToIndex - groupIndex) + 1f;
         else blur += Math.abs(groupIndex - Math.max(amllScrollToIndex, latest));
-        if (width <= 1024) blur *= 0.8f;
-        return Math.min(5f, blur);
+        if (amllViewportWidthPx() <= 1024f) blur *= 0.8f;
+        return blur;
     }
 
-    private float amllMaxLineBlurPad(float s) {
-        return Math.max(12f, 5f * 5.5f * Math.max(1f, s));
+    private boolean shouldUseAMLLLineBlur(boolean isActive, float blurLevel) {
+        return !hoveredLyrics && !isActive && amllBlurRadius(blurLevel) > 0.05f;
     }
 
-    private SkijaRenderer rendererForAMLLLineBlur(CachedLyricLine line, float blurLevel) {
-        if (line == null || line.blurRenderer == null || line.inactiveImage == null) return null;
-        float sigma = clamp(blurLevel, 0f, 5f);
-        if (Math.abs(line.currentBlurSigma - sigma) < 0.05f && line.blurReady) return line.blurRenderer;
-        line.blurRenderer.clear(0x00000000);
-        Canvas c = line.blurRenderer.canvas();
-        c.save();
-        float drawScale = Math.max(1f, guiScale);
-        c.scale(drawScale, drawScale);
-        float dx = line.blurPad - line.inactivePad;
-        float dy = line.blurPad - line.inactivePad;
-        try (Paint paint = new Paint(); ImageFilter blur = ImageFilter.makeBlur(sigma, sigma, FilterTileMode.DECAL)) {
-            paint.setAntiAlias(true);
-            paint.setImageFilter(blur);
-            paint.setColor(WHITE);
-            c.drawImageRect(line.inactiveImage, Rect.makeXYWH(dx, dy, line.inactiveW, line.inactiveH), paint);
+    private float amllBlurRadius(float blurLevel) {
+        return amllCssPx(clamp(blurLevel, 0f, 5f));
+    }
+
+    private int amllBlurStep(float blurLevel) {
+        float cssRadius = clamp(blurLevel, 0f, 5f);
+        if (cssRadius <= 0.05f) return 0;
+        return Math.max(1, Math.round(cssRadius));
+    }
+
+    private float amllBlurRadiusForStep(int step) {
+        return amllCssPx(clamp(step, 0, 5));
+    }
+
+    private void blitAMLLSoftBlurredLine(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y, float w, float h, float alpha, float clipX, float clipY, float clipW, float clipH, float blurLevel) {
+        float radius = amllBlurRadius(blurLevel);
+        if (radius <= 0.05f) {
+            blitRendererClippedAlpha(g, r, x, y, w, h, alpha, clipX, clipY, clipW, clipH);
+            return;
         }
-        c.restore();
-        line.blurRenderer.upload();
-        line.currentBlurSigma = sigma;
-        line.blurReady = true;
-        return line.blurRenderer;
+        float t = clamp01(radius / Math.max(0.001f, amllCssPx(5f)));
+        float innerAxis = radius * (0.85f + 0.15f * t);
+        float innerDiagonal = innerAxis * 0.7071f;
+        float outerAxis = radius * (1.65f + 0.25f * t);
+        float outerDiagonal = outerAxis * 0.7071f;
+        float centerAlpha = alpha * (0.22f - 0.12f * t);
+        float innerAxisAlpha = alpha * (0.095f - 0.015f * t);
+        float innerDiagonalAlpha = alpha * (0.055f - 0.010f * t);
+        float outerAxisAlpha = alpha * (0.050f + 0.010f * t);
+        float outerDiagonalAlpha = Math.max(0f, (alpha - centerAlpha - innerAxisAlpha * 4f - innerDiagonalAlpha * 4f - outerAxisAlpha * 4f) * 0.25f);
+        blitRendererClippedAlpha(g, r, x, y, w, h, centerAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - innerAxis, y, w, h, innerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + innerAxis, y, w, h, innerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x, y - innerAxis, w, h, innerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x, y + innerAxis, w, h, innerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - innerDiagonal, y - innerDiagonal, w, h, innerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + innerDiagonal, y - innerDiagonal, w, h, innerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - innerDiagonal, y + innerDiagonal, w, h, innerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + innerDiagonal, y + innerDiagonal, w, h, innerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - outerAxis, y, w, h, outerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + outerAxis, y, w, h, outerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x, y - outerAxis, w, h, outerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x, y + outerAxis, w, h, outerAxisAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - outerDiagonal, y - outerDiagonal, w, h, outerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + outerDiagonal, y - outerDiagonal, w, h, outerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x - outerDiagonal, y + outerDiagonal, w, h, outerDiagonalAlpha, clipX, clipY, clipW, clipH);
+        blitRendererClippedAlpha(g, r, x + outerDiagonal, y + outerDiagonal, w, h, outerDiagonalAlpha, clipX, clipY, clipW, clipH);
     }
 
     private void blitInterludeDots(GuiGraphicsExtractor g, float s, float clipX, float clipY, float clipW, float clipH, float globalAlpha) {
@@ -3398,6 +3495,53 @@ public class Musicpage extends Screen {
         }
     }
 
+    private void blitInterludeDotsToLayer(Canvas c, float s, float clipX, float clipY, float clipW, float clipH) {
+        if (interludeOpacity <= 0.01f) return;
+        float duration = Math.max(0.001f, interludeEndTime - interludeStartTime);
+        float current = clamp(interludeCurrentTime - interludeStartTime, 0f, duration);
+        float interludeDuration = duration * 1000f;
+        float currentDuration = current * 1000f;
+        float breatheDuration = interludeDuration / Math.max(1f, (float) Math.ceil(interludeDuration / 1500f));
+        float scale = 1f;
+
+        float globalOpacity = 1f;
+        scale *= (float) Math.sin(1.5f * Math.PI - currentDuration / breatheDuration * 2f) / 20f + 1f;
+        if (currentDuration < 2000f) scale *= easeOutExpo(currentDuration / 2000f);
+        if (currentDuration < 500f) globalOpacity = 0f;
+        else if (currentDuration < 1000f) globalOpacity *= (currentDuration - 500f) / 500f;
+        if (interludeDuration - currentDuration < 750f) scale *= 1f - easeInOutBack((750f - (interludeDuration - currentDuration)) / 750f / 2f);
+        if (interludeDuration - currentDuration < 375f) globalOpacity *= clamp01((interludeDuration - currentDuration) / 375f);
+        float dotsDuration = clampPositive(interludeDuration - 750f);
+        float groupScale = clampPositive(scale) * 0.7f;
+
+        float dot = amllInterludeDotSize();
+        float gap = amllInterludeDotGap();
+        float contentW = dot * 3f + gap * 2f;
+        float baseX = interludeNextDuet
+                ? layoutRightX + layoutRightW - contentW * groupScale - amllInterludeDotPaddingX()
+                : layoutRightX + amllInterludeDotPaddingX();
+        float baseY = interludeY + interludeSlotHeight(s) * 0.5f;
+
+        float dot0Opacity = clamp(0.25f, currentDuration * 3f / dotsDuration * 0.75f, 1f);
+        float dot1Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f) * 3f / dotsDuration * 0.75f, 1f);
+        float dot2Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f * 2f) * 3f / dotsDuration * 0.75f, 1f);
+
+        try (Paint paint = new Paint()) {
+            paint.setAntiAlias(true);
+            for (int i = 0; i < 3; i++) {
+                float dotOpacity = i == 0 ? dot0Opacity : i == 1 ? dot1Opacity : dot2Opacity;
+                float size = dot * groupScale;
+                float x = baseX + (i * (dot + gap)) * groupScale;
+                float y = baseY - size * 0.5f;
+                if (x + size < clipX || x > clipX + clipW || y + size < clipY || y > clipY + clipH) continue;
+                float alpha = clamp01(interludeOpacity * globalOpacity * dotOpacity);
+                if (alpha <= 0.01f) continue;
+                paint.setColor(withAlpha(WHITE, alpha));
+                c.drawCircle(x + size * 0.5f, y + size * 0.5f, size * 0.5f, paint);
+            }
+        }
+    }
+
     private boolean ensureInterludeDotRenderer(float s) {
         float dot = amllInterludeDotSize();
         if (interludeDotRenderer != null && Math.abs(interludeDotScale - dot) < 0.001f) return true;
@@ -3412,7 +3556,7 @@ public class Musicpage extends Screen {
         try (Paint paint = new Paint()) {
             paint.setAntiAlias(true);
             paint.setColor(WHITE);
-            c.drawCircle(dot * 0.5f, dot * 0.5f, dot * 0.4878f, paint);
+            c.drawCircle(dot * 0.5f, dot * 0.5f, dot * 0.5f, paint);
         }
         c.restore();
         interludeDotRenderer.upload();
@@ -3626,6 +3770,18 @@ public class Musicpage extends Screen {
         iconPathCache.clear();
     }
 
+    private void syncTrackIndexToPlaying() {
+        MusicLoader.MusicTrack playing = MusicLoader.getCurrentTrack();
+        if (playing == null) return;
+        List<MusicLoader.MusicTrack> tracks = MusicLoader.getTracks();
+        for (int i = 0; i < tracks.size(); i++) {
+            if (tracks.get(i) == playing) {
+                trackIndex = i;
+                return;
+            }
+        }
+    }
+
     private void clampTrackIndex() {
         int count = MusicLoader.getTracks().size();
         if (count <= 0) trackIndex = 0;
@@ -3648,20 +3804,22 @@ public class Musicpage extends Screen {
     }
 
     private float amllCssPx(float px) {
-        return px;
+        return px / Math.max(1f, guiScale);
     }
 
     private float amllViewportWidthPx() {
-        return width;
+        return width * Math.max(1f, guiScale);
     }
 
     private float amllViewportHeightPx() {
-        return height;
+        return height * Math.max(1f, guiScale);
     }
 
     private float amllHorizontalLayoutMaxWidth() {
-        float heightFactor = amllViewportHeightPx() <= 1000f ? 0.45f : 0.50f;
-        return Math.max(1f, Math.min(height * heightFactor, width * 0.38f));
+        float cssHeight = amllViewportHeightPx();
+        float cssWidth = amllViewportWidthPx();
+        float heightFactor = cssHeight <= 1000f ? 0.45f : 0.50f;
+        return Math.max(1f, amllCssPx(Math.min(cssHeight * heightFactor, cssWidth * 0.38f)));
     }
 
     private float amllHorizontalColumnGap() {
@@ -3724,8 +3882,7 @@ public class Musicpage extends Screen {
         float gap = amllHorizontalGap();
         float thumbH = amllHorizontalThumbRowHeight();
         float tailFr = amllViewportHeightPx() <= 768f ? 0.2f : 0.3f;
-        float bottomControlsH = amllHorizontalBottomControlsRowHeight();
-        float fixed = thumbH + coverSize + bottomControlsH + gap * 5f;
+        float fixed = thumbH + coverSize + gap * 5f;
         float free = Math.max(0f, height - fixed);
         float totalFr = 0.45f + 3f + tailFr;
         float dragH = free * 0.45f / totalFr;
@@ -3863,10 +4020,6 @@ public class Musicpage extends Screen {
         return amllCssPx(40f);
     }
 
-    private float amllHorizontalBottomControlsRowHeight() {
-        return amllBottomToggleSize();
-    }
-
     private float amllBottomToggleSize() {
         boolean compact = amllViewportWidthPx() <= 1600f || amllViewportHeightPx() <= 1000f;
         return amllHorizontalEm() * (compact ? 3f : 4f);
@@ -3883,7 +4036,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricFontSize() {
-        return Math.max(Math.max(height * 0.05f, width * 0.025f), 14f);
+        return Math.max(Math.max(height * 0.05f, width * 0.025f), amllCssPx(14f));
     }
 
     private float amllInactiveLyricFontSize(float activeSize) {
@@ -3891,11 +4044,11 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricLinePaddingX(float fontSize) {
-        return fontSize;
+        return amllViewportWidthPx() <= 500f ? amllCssPx(20f) : fontSize;
     }
 
     private float amllLyricLinePaddingY(float fontSize) {
-        return fontSize * 0.5f;
+        return fontSize * 0.4f;
     }
 
     private float amllLyricTextMaxWidth(float lineWidth, float fontSize) {
@@ -3903,7 +4056,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricLineGap(float s) {
-        return 45f * s;
+        return amllLyricFontSize() * 0.3f;
     }
 
     private float amllInterludeDotSize() {
@@ -3912,7 +4065,11 @@ public class Musicpage extends Screen {
     }
 
     private float amllInterludeDotGap() {
-        return amllLyricFontSize() * 0.25f;
+        return amllLyricFontSize() * 0.25f + amllCssPx(4f);
+    }
+
+    private float amllInterludeDotMargin() {
+        return amllLyricFontSize() * 0.4f;
     }
 
     private float amllInterludeDotPaddingX() {
@@ -3920,7 +4077,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllInterludeDotPaddingY() {
-        return layoutLyricH * 0.025f;
+        return Math.max(0f, layoutRightW * 0.025f);
     }
 
     private float fitTextSize(String text, Typeface tf, float preferredSize, float minSize, float maxWidth) {
@@ -3957,211 +4114,5 @@ public class Musicpage extends Screen {
         return (sec / 60) + ":" + String.format("%02d", sec % 60);
     }
 
-    private float sin(float v) { return (float) Math.sin(v); }
-    private float cos(float v) { return (float) Math.cos(v); }
-    private float clamp(float v, float min, float max) { return Math.max(min, Math.min(max, v)); }
 
-    private int withAlpha(int color, float alpha) {
-        int a = Math.max(0, Math.min(255, Math.round(alpha * 255f)));
-        return (a << 24) | (color & 0x00FFFFFF);
-    }
-
-    private float alphaOf(int color) { return ((color >>> 24) & 0xFF) / 255f; }
-
-    private int rgb(int r, int g, int b) {
-        return 0xFF000000 | (clamp8(r) << 16) | (clamp8(g) << 8) | clamp8(b);
-    }
-
-    private int clamp8(int v) { return Math.max(0, Math.min(255, v)); }
-
-    private int lighten(int color, float amount) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        return rgb((int)(r + (255 - r) * amount), (int)(g + (255 - g) * amount), (int)(b + (255 - b) * amount));
-    }
-
-    private int darken(int color, float amount) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        return rgb((int)(r * (1f - amount)), (int)(g * (1f - amount)), (int)(b * (1f - amount)));
-    }
-
-    private int rotate(int color) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        return rgb(Math.max(r, b), Math.max(g - 8, 0), Math.max(r - 20, 0));
-    }
-
-    private int saturate(int color, float factor) {
-        int r = (color >>> 16) & 0xFF;
-        int g = (color >>> 8) & 0xFF;
-        int b = color & 0xFF;
-        float gray = (r + g + b) / 3f;
-        return rgb((int)(gray + (r - gray) * factor), (int)(gray + (g - gray) * factor), (int)(gray + (b - gray) * factor));
-    }
-
-    private record RubyText(float startTime, float endTime, String text) {}
-
-    private record LyricWord(float startTime, float endTime, String word, String romanWord, java.util.List<RubyText> ruby) {
-        public LyricWord(float startTime, float endTime, String word) {
-            this(startTime, endTime, word, null, List.of());
-        }
-        public LyricWord(float startTime, float endTime, String word, String romanWord) {
-            this(startTime, endTime, word, romanWord, List.of());
-        }
-        public LyricWord withRomanWord(String romanWord) {
-            return new LyricWord(startTime, endTime, word, romanWord, ruby);
-        }
-    }
-
-    private record LyricLine(float startTime, float endTime, String text, boolean isBG,
-                             java.util.List<LyricWord> words, String translation, String romanization, boolean isDuet) {
-        public LyricLine(float startTime, float endTime, String text, boolean isBG,
-                         java.util.List<LyricWord> words, String translation, boolean isDuet) {
-            this(startTime, endTime, text, isBG, words, translation, null, isDuet);
-        }
-        public LyricLine(float startTime, float endTime, String text, boolean isBG) {
-            this(startTime, endTime, text, isBG, null, null, null, false);
-        }
-        public boolean isDynamic() { return words != null && !words.isEmpty(); }
-    }
-
-    private record WordRange(float startTime, float endTime,
-                             float startX, float endX,
-                             float y, float h,
-                             float baseY, float baseH,
-                             float rubyY, float rubyH,
-                             float romanY, float romanH, float romanStartX, float romanEndX,
-                             float romanWordStartX, float romanWordEndX, float romanWordY, float romanWordH,
-                             String wordText, java.util.List<EmphasisSlice> emphasisSlices,
-                             int lineIndex, int wordIndex, int wordCount,
-                             boolean emphasize, java.util.List<RubyText> ruby) {}
-
-    private record RomanWordBox(float startX, float endX, float y, float h) {}
-
-    private record EmphasisSlice(float startX, float endX) {}
-
-    private record TextSegment(String text, float width, boolean isSpace) {}
-
-    private record SpringParams(float stiffness, float damping) {}
-
-    private record LyricPresentation(float opacity, float scale) {}
-
-    private record InterludeState(boolean active, int anchor, float start, float end, boolean nextDuet) {}
-
-    private record HorizontalGrid(float coverY, float controlsY, float controlsH, float lyricTop, float lyricH) {}
-
-    private record TexturedQuadRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
-                                           float x, float y, float w, float h,
-                                           float u0, float v0, float u1, float v1,
-                                           int color, ScreenRectangle scissorArea, ScreenRectangle bounds)
-            implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
-        @Override
-        public void buildVertices(VertexConsumer vertexConsumer) {
-            vertexConsumer.addVertexWith2DPose(pose, x, y).setUv(u0, v0).setColor(color);
-            vertexConsumer.addVertexWith2DPose(pose, x, y + h).setUv(u0, v1).setColor(color);
-            vertexConsumer.addVertexWith2DPose(pose, x + w, y + h).setUv(u1, v1).setColor(color);
-            vertexConsumer.addVertexWith2DPose(pose, x + w, y).setUv(u1, v0).setColor(color);
-        }
-    }
-
-    private static final class TextImage {
-        final Image image;
-        final SkijaRenderer renderer;
-        final float w;
-        final float h;
-        final float pad;
-
-        TextImage(Image image, SkijaRenderer renderer, float w, float h, float pad) {
-            this.image = image;
-            this.renderer = renderer;
-            this.w = w;
-            this.h = h;
-            this.pad = pad;
-        }
-    }
-
-    private static final class CachedLyricLine implements AutoCloseable {
-        LyricLine lineRef;
-        Image whiteImage;
-        final Image activeImage;
-        final SkijaRenderer activeRenderer;
-        final float activeW;
-        final float activeH;
-        final float activePad;
-        final Image inactiveImage;
-        final SkijaRenderer inactiveRenderer;
-        final float inactiveW;
-        final float inactiveH;
-        final float inactivePad;
-        final Image hoverImage;
-        final SkijaRenderer hoverRenderer;
-        final float hoverW;
-        final float hoverH;
-        final float hoverPad;
-        final Image blurImage;
-        final SkijaRenderer blurRenderer;
-        final float blurW;
-        final float blurH;
-        final float blurPad;
-        java.util.List<WordRange> dynamicWordRanges = List.of();
-        float currentY;
-        float velocityY;
-        float currentScale = 1f;
-        float velocityScale;
-        float currentOpacity = 1f;
-        float velocityOpacity;
-        float currentBlurVisual;
-        float velocityBlur;
-        float currentBlurSigma = -1f;
-        float currentBrightAlpha = 1f;
-        float currentDarkAlpha = 0.2f;
-        float targetBrightAlpha = 1f;
-        float targetDarkAlpha = 0.2f;
-        boolean blurReady;
-        boolean initialized;
-
-        CachedLyricLine(TextImage active, TextImage inactive, TextImage hover, TextImage blurred) {
-            this.activeImage = active.image;
-            this.activeRenderer = active.renderer;
-            this.activeW = active.w;
-            this.activeH = active.h;
-            this.activePad = active.pad;
-            this.inactiveImage = inactive.image;
-            this.inactiveRenderer = inactive.renderer;
-            this.inactiveW = inactive.w;
-            this.inactiveH = inactive.h;
-            this.inactivePad = inactive.pad;
-            this.hoverImage = hover.image;
-            this.hoverRenderer = hover.renderer;
-            this.hoverW = hover.w;
-            this.hoverH = hover.h;
-            this.hoverPad = hover.pad;
-            this.blurImage = blurred.image;
-            this.blurRenderer = blurred.renderer;
-            this.blurW = blurred.w;
-            this.blurH = blurred.h;
-            this.blurPad = blurred.pad;
-        }
-
-        void setDynamicWordRanges(java.util.List<WordRange> ranges) {
-            this.dynamicWordRanges = ranges == null ? List.of() : ranges;
-        }
-
-        @Override
-        public void close() {
-            if (whiteImage != null) whiteImage.close();
-            if (activeImage != null) activeImage.close();
-            if (inactiveImage != null) inactiveImage.close();
-            if (hoverImage != null) hoverImage.close();
-            if (blurImage != null) blurImage.close();
-            if (activeRenderer != null) activeRenderer.close();
-            if (inactiveRenderer != null) inactiveRenderer.close();
-            if (hoverRenderer != null) hoverRenderer.close();
-            if (blurRenderer != null) blurRenderer.close();
-        }
-    }
 }

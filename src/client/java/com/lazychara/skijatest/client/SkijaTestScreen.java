@@ -1,4 +1,6 @@
 package com.lazychara.skijatest.client;
+
+import com.lazychara.skijatest.client.Musicpage.Musicpage;
 import io.github.humbleui.skija.Typeface;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
