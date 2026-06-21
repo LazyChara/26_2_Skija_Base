@@ -7,6 +7,7 @@ import io.github.humbleui.skija.Image;
 final class CachedLyricLine implements AutoCloseable {
     LyricLine lineRef;
     Image whiteImage;
+    SkijaRenderer whiteRenderer;
     final Image activeImage;
     final SkijaRenderer activeRenderer;
     final float activeW;
@@ -65,6 +66,7 @@ final class CachedLyricLine implements AutoCloseable {
     @Override
     public void close() {
         if (whiteImage != null) whiteImage.close();
+        if (whiteRenderer != null) whiteRenderer.close();
         if (activeImage != null) activeImage.close();
         if (inactiveImage != null) inactiveImage.close();
         if (hoverImage != null) hoverImage.close();
