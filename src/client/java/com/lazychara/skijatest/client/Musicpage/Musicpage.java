@@ -5,17 +5,17 @@ import static com.lazychara.skijatest.client.Musicpage.MusicPageMath.*;
 
 import io.github.humbleui.skija.Canvas;
 import io.github.humbleui.skija.FilterBlurMode;
-import io.github.humbleui.skija.FilterTileMode;
 import io.github.humbleui.skija.Font;
-import io.github.humbleui.skija.ImageFilter;
 import io.github.humbleui.skija.Image;
 import io.github.humbleui.skija.MaskFilter;
 import io.github.humbleui.skija.Paint;
 import io.github.humbleui.skija.Path;
 import io.github.humbleui.skija.Typeface;
 import io.github.humbleui.types.Rect;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -26,8 +26,10 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 import org.joml.Matrix3x2f;
+import org.joml.Matrix3x2fc;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -50,6 +52,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Musicpage extends Screen {
+    private static final RenderPipeline AMLL_LYRIC_BLUR_PIPELINE = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.GUI_TEXTURED_SNIPPET)
+            .withLocation(Identifier.parse("skija-test:pipeline/amll_lyric_blur"))
+            .withFragmentShader(Identifier.parse("skija-test:core/amll_lyric_blur"))
+            .build());
+
+    private static final RenderPipeline AMLL_DOT_PIPELINE = RenderPipelines.register(RenderPipeline.builder(RenderPipelines.GUI_TEXTURED_SNIPPET)
+            .withLocation(Identifier.parse("skija-test:pipeline/amll_dot"))
+            .withFragmentShader(Identifier.parse("skija-test:core/amll_dot"))
+            .build());
+
     private static final int WHITE = 0xFFFFFFFF;
     private static final int W88 = 0xE0FFFFFF;
     private static final int W70 = 0xB3FFFFFF;
@@ -117,6 +129,11 @@ public class Musicpage extends Screen {
     private float backgroundRenderTime;
     private float backgroundLowFreqPulse;
     private float backgroundPulseVisual;
+    private final float[] backgroundLowFreqWindow = new float[10];
+    private int backgroundLowFreqWindowCount;
+    private int backgroundLowFreqWindowCursor;
+    private long backgroundLowFreqFrameTime;
+    private final AMLLSpring interludeSpring = new AMLLSpring(0f);
     private int trackIndex;
     private Image coverImage;
     private List<LyricLine> lyricLines = List.of();
@@ -156,9 +173,6 @@ public class Musicpage extends Screen {
     private float volumeVisual;
     private float progressBounceX;
     private float volumeBounceX;
-    private SkijaRenderer interludeDotRenderer;
-    private int bakedBlurBudgetThisFrame;
-    private float interludeDotScale = -1f;
     private float interludeY;
     private float interludeVelocityY;
     private float interludeOpacity;
@@ -229,8 +243,7 @@ public class Musicpage extends Screen {
         lyricLayerBlitOffsetY = 0f;
         lyricSnapOnNextRender = true;
         backgroundRenderTime = 0f;
-        backgroundLowFreqPulse = 0f;
-        backgroundPulseVisual = 0f;
+        resetBackgroundPulseState();
         lastActiveLyric = -1;
         amllHotGroups.clear();
         amllBufferedGroups.clear();
@@ -247,7 +260,6 @@ public class Musicpage extends Screen {
         syncTrackIndexToPlaying();
         clampTrackIndex();
         refreshTrackCache();
-        ensureInterludeDotRenderer(pageScale());
     }
 
     @Override
@@ -335,11 +347,7 @@ public class Musicpage extends Screen {
     private void renderBackgroundLayer(float time) {
         if (bgRenderer == null) return;
         backgroundRenderTime = time;
-        float targetPulse = currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack)
-                ? 0.035f + 0.018f * (0.5f + 0.5f * sin(time * 2.2f))
-                : 0f;
-        backgroundPulseVisual += (targetPulse - backgroundPulseVisual) * 0.06f;
-        backgroundLowFreqPulse = backgroundPulseVisual;
+        updateBackgroundLowFreqPulse(System.currentTimeMillis());
         if (gpuBackground != null && gpuBackground.ready()) return;
         renderer = bgRenderer;
         int bw = bgRenderer.getWidth();
@@ -347,6 +355,69 @@ public class Musicpage extends Screen {
         renderer.clear(paletteDark);
         drawAnimatedFluidLayer(time, bw, bh);
         renderer.upload();
+    }
+
+    private void resetBackgroundPulseState() {
+        backgroundLowFreqPulse = 0f;
+        backgroundPulseVisual = 0f;
+        backgroundLowFreqWindowCount = 0;
+        backgroundLowFreqWindowCursor = 0;
+        backgroundLowFreqFrameTime = 0L;
+    }
+
+    private void updateBackgroundLowFreqPulse(long now) {
+        boolean playing = currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack);
+        float lowFreq = playing ? MusicLoader.getCurrentAudioLowFreqLevel() : 0f;
+        float target = amllBackgroundLowFreqGradient(lowFreq);
+        float delta = backgroundLowFreqFrameTime == 0L ? 0f : Math.max(0f, now - backgroundLowFreqFrameTime);
+        backgroundLowFreqFrameTime = now;
+        float factor = clamp(0.003f * delta, 0f, 1f);
+        if (backgroundPulseVisual < target) {
+            backgroundPulseVisual = Math.min(target, backgroundPulseVisual + (target - backgroundPulseVisual) * factor);
+        } else {
+            backgroundPulseVisual = Math.max(target, backgroundPulseVisual + (target - backgroundPulseVisual) * factor);
+        }
+        if (!Float.isFinite(backgroundPulseVisual)) backgroundPulseVisual = 0f;
+        backgroundLowFreqPulse = playing ? backgroundPulseVisual : 0f;
+    }
+
+    private float amllBackgroundLowFreqGradient(float volume) {
+        float value = clamp(volume, 0f, 1f);
+        int window = backgroundLowFreqWindow.length;
+        if (backgroundLowFreqWindowCount < window && !backgroundLowFreqWindowContains(value)) {
+            int index = (backgroundLowFreqWindowCursor + backgroundLowFreqWindowCount) % window;
+            backgroundLowFreqWindow[index] = value;
+            backgroundLowFreqWindowCount++;
+            return 0f;
+        }
+        if (backgroundLowFreqWindowCount < window) {
+            int index = (backgroundLowFreqWindowCursor + backgroundLowFreqWindowCount) % window;
+            backgroundLowFreqWindow[index] = value;
+            backgroundLowFreqWindowCount++;
+        } else {
+            backgroundLowFreqWindow[backgroundLowFreqWindowCursor] = value;
+            backgroundLowFreqWindowCursor = (backgroundLowFreqWindowCursor + 1) % window;
+        }
+        float min = Float.MAX_VALUE;
+        float max = 0f;
+        for (int i = 0; i < backgroundLowFreqWindowCount; i++) {
+            int index = (backgroundLowFreqWindowCursor + i) % window;
+            float v = backgroundLowFreqWindow[index];
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+        }
+        if (min == Float.MAX_VALUE) return 0f;
+        float maxInInterval = max * max;
+        float difference = maxInInterval - min;
+        return difference > 0.35f ? maxInInterval : min * 0.25f;
+    }
+
+    private boolean backgroundLowFreqWindowContains(float value) {
+        for (int i = 0; i < backgroundLowFreqWindowCount; i++) {
+            int index = (backgroundLowFreqWindowCursor + i) % backgroundLowFreqWindow.length;
+            if (Math.abs(backgroundLowFreqWindow[index] - value) < 0.000001f) return true;
+        }
+        return false;
     }
 
 
@@ -375,6 +446,7 @@ public class Musicpage extends Screen {
                 lyricRenderScroll = 0f;
                 lyricLayerBlitOffsetY = 0f;
                 lyricSnapOnNextRender = true;
+                resetBackgroundPulseState();
                 openedAt = now;
                 rebuildCover(track);
             }
@@ -412,9 +484,8 @@ public class Musicpage extends Screen {
 
     private void renderLyricsLayer(long now, float dt) {
         if (lyricsRenderer == null) return;
-        		renderer = lyricsRenderer;
-        		renderer.clear(0x00000000);
-        		bakedBlurBudgetThisFrame = 0;
+        renderer = lyricsRenderer;
+        renderer.clear(0x00000000);
         if (currentUiTrack == null) {
             renderer.upload();
             return;
@@ -584,7 +655,19 @@ public class Musicpage extends Screen {
         if (coverImage != null) {
             renderer.canvas().save();
             renderer.canvas().clipRRect(io.github.humbleui.types.RRect.makeXYWH(x, y, size, size, 6f * s));
-            renderer.canvas().drawImageRect(coverImage, Rect.makeXYWH(x, y, size, size));
+            float imgW = coverImage.getWidth();
+            float imgH = coverImage.getHeight();
+            float scale = Math.max(size / imgW, size / imgH);
+            float drawW = imgW * scale;
+            float drawH = imgH * scale;
+            float drawX = x + (size - drawW) * 0.5f;
+            float drawY = y + (size - drawH) * 0.5f;
+            try (Paint p = new Paint()) {
+                renderer.canvas().drawImageRect(coverImage,
+                        Rect.makeXYWH(0, 0, imgW, imgH),
+                        Rect.makeXYWH(drawX, drawY, drawW, drawH),
+                        io.github.humbleui.skija.SamplingMode.LINEAR, p, true);
+            }
             renderer.canvas().restore();
         } else {
             renderer.drawCircle(x + size / 2f, y + size / 2f, size * 0.32f, W18);
@@ -773,63 +856,14 @@ public class Musicpage extends Screen {
         float drawH = texH * scale;
         alpha *= amllLyricEdgeMaskAlpha(drawY, drawH, layoutLyricTop, layoutLyricH);
         if (alpha <= 0.01f) return;
-        float blurLevel = line.currentBlurVisual;
         try (Paint paint = new Paint()) {
             paint.setAntiAlias(true);
             paint.setColor(withAlpha(WHITE, alpha));
-            			int targetStep = amllBlurStep(blurLevel);
-            			boolean alreadyBaked = line.bakedBlurImage != null && line.bakedBlurStep == targetStep;
-            			boolean canBake = alreadyBaked || bakedBlurBudgetThisFrame < 1;
-            			if (shouldUseAMLLLineBlur(isActive, blurLevel) && canBake && ensureBakedBlur(line, image, texW, texH, blurLevel)) {
-            				if (!alreadyBaked) bakedBlurBudgetThisFrame++;
-            				float bakedPad = line.bakedBlurPad * scale;
-            				c.drawImageRect(line.bakedBlurImage, Rect.makeXYWH(drawX - bakedPad, drawY - bakedPad, line.bakedBlurW * scale, line.bakedBlurH * scale), paint);
-            			} else {
-            				c.drawImageRect(image, Rect.makeXYWH(drawX, drawY, drawW, drawH), paint);
-            			}
+            c.drawImageRect(image, Rect.makeXYWH(drawX, drawY, drawW, drawH), paint);
         }
     }
 
-    private boolean ensureBakedBlur(CachedLyricLine line, Image source, float sourceW, float sourceH, float blurLevel) {
-        if (line == null || source == null) return false;
-        int step = amllBlurStep(blurLevel);
-        if (step <= 0) return false;
-        float radius = amllBlurRadiusForStep(step);
-        float pad = Math.max(2f, radius * 3f);
-        float logicalW = Math.max(1f, sourceW + pad * 2f);
-        float logicalH = Math.max(1f, sourceH + pad * 2f);
-        if (line.bakedBlurImage != null && line.bakedBlurRenderer != null && line.bakedBlurStep == step && Math.abs(line.bakedBlurW - logicalW) < 0.5f && Math.abs(line.bakedBlurH - logicalH) < 0.5f && Math.abs(line.bakedBlurPad - pad) < 0.05f) return true;
 
-        line.clearBakedBlur();
-        int imgW = Math.max(1, Math.round(logicalW * guiScale));
-        int imgH = Math.max(1, Math.round(logicalH * guiScale));
-        SkijaRenderer bakedRenderer = new SkijaRenderer("music_page_lyric_blur", imgW, imgH);
-        boolean transferred = false;
-        try {
-            bakedRenderer.clear(0x00000000);
-            Canvas bc = bakedRenderer.canvas();
-            bc.save();
-            bc.scale(guiScale, guiScale);
-            try (Paint paint = new Paint(); ImageFilter blur = ImageFilter.makeBlur(radius, radius, FilterTileMode.DECAL)) {
-                paint.setAntiAlias(true);
-                paint.setColor(WHITE);
-                paint.setImageFilter(blur);
-                bc.drawImageRect(source, Rect.makeXYWH(pad, pad, sourceW, sourceH), paint);
-            }
-            bc.restore();
-            bakedRenderer.upload();
-            line.bakedBlurRenderer = bakedRenderer;
-            line.bakedBlurImage = bakedRenderer.getSurface().makeImageSnapshot();
-            line.bakedBlurW = logicalW;
-            line.bakedBlurH = logicalH;
-            line.bakedBlurPad = pad;
-            line.bakedBlurStep = step;
-            transferred = true;
-            return true;
-        } finally {
-            if (!transferred) bakedRenderer.close();
-        }
-    }
 
     private float getLineContentHeight(int index, int activeIndex, float s) {
         CachedLyricLine cached = index >= 0 && index < lyricCache.size() ? lyricCache.get(index) : null;
@@ -904,7 +938,7 @@ public class Musicpage extends Screen {
         boolean hasRuby = hasRubyWords(line);
         String romanText = effectiveRomanText(line);
         float rubySize = size * 0.5f;
-        float transSize = size * 0.75f;
+        float transSize = amllLyricSubLineFontSize(size);
         float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
         String[] wrappedLines = wrapText(line.text(), tf, size, textMaxWidth);
         String[] transLines = line.translation() == null || line.translation().isBlank() ? new String[0] : wrapText(line.translation(), tf, transSize, textMaxWidth);
@@ -915,7 +949,7 @@ public class Musicpage extends Screen {
         try (Font font = new Font(tf, size); Font rubyFont = new Font(tf, rubySize); Font subFont = new Font(tf, transSize)) {
             baseLineH = Math.max(1f, (font.getMetrics().getDescent() - font.getMetrics().getAscent()) * 1.20f);
             rubyLineH = hasRuby ? Math.max(1f, (rubyFont.getMetrics().getDescent() - rubyFont.getMetrics().getAscent()) * 1.05f) : 0f;
-            subLineH = Math.max(1f, (subFont.getMetrics().getDescent() - subFont.getMetrics().getAscent()) * 1.20f);
+            subLineH = amllLyricSubLineHeight(transSize);
         }
         float mainBlockLineH = baseLineH + rubyLineH;
         float romanY = -1f;
@@ -1132,20 +1166,23 @@ public class Musicpage extends Screen {
         float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
         String[] mainLines = wrapText(mainText, tf, size, textMaxWidth);
         float rubySize = size * 0.5f;
-        float transSize = size * 0.75f;
+        float transSize = amllLyricSubLineFontSize(size);
         String[] transLines = transText.isEmpty() ? new String[0] : wrapText(transText, tf, transSize, textMaxWidth);
         String[] romanLines = romanText.isEmpty() ? new String[0] : wrapText(romanText, tf, transSize, textMaxWidth);
         float scale = Math.max(1f, guiScale);
         try (Font font = new Font(tf, size * scale); Font rubyFont = new Font(tf, rubySize * scale); Font transFont = new Font(tf, transSize * scale)) {
             float lineH = Math.max(1f, (font.getMetrics().getDescent() - font.getMetrics().getAscent()) / scale * 1.20f);
             float rubyLineH = Math.max(1f, (rubyFont.getMetrics().getDescent() - rubyFont.getMetrics().getAscent()) / scale * 1.05f);
-            float transLineH = Math.max(1f, (transFont.getMetrics().getDescent() - transFont.getMetrics().getAscent()) / scale * 1.20f);
+            float transLineH = amllLyricSubLineHeight(transSize);
             float maxLineW = 1f;
             for (String line : mainLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, size));
             for (String line : transLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, transSize));
             for (String line : romanLines) maxLineW = Math.max(maxLineW, renderer.measureText(line, tf, transSize));
+            float maxCssBlur = 5f;
+            float safeBlurPad = maxCssBlur * 1.5f; // 保证留有充足采样边界
             float blurPad = blurSigma > 0f ? Math.max(10f, blurSigma * (drawFaintCore ? 3.0f : 5.5f)) : 0f;
-            float pad = activePadOverride > 0f ? activePadOverride : (blurPad + 2f);
+            float basePad = Math.max(blurPad, safeBlurPad);
+            float pad = activePadOverride > 0f ? activePadOverride : (basePad + 2f);
             float textX = pad + linePadX;
             float textY = pad + linePadY;
             boolean alignRight = lyricLine.isDuet();
@@ -1178,7 +1215,7 @@ public class Musicpage extends Screen {
                     if (transLines.length > 0 || romanLines.length > 0) {
                         curY += linePadY * 0.5f;
                         int oldColor = paint.getColor();
-                        paint.setColor(withAlpha(oldColor, alphaOf(oldColor) * 0.8f));
+                        paint.setColor(withAlpha(oldColor, alphaOf(oldColor) * amllLyricSubLineOpacity()));
                         for (String line : transLines) {
                             float curX = textX;
                             if (alignRight) curX = logicalW - pad - linePadX - renderer.measureText(line, tf, transSize);
@@ -1433,96 +1470,107 @@ public class Musicpage extends Screen {
         }
         boolean snap = lyricSnapOnNextRender;
         InterludeState interlude = computeInterlude(active, currentSeconds);
-        float targetScroll = lyricScrollTarget(active, s, interlude);
-        if (snap) {
-            lyricScroll = targetScroll;
-            lyricScrollVelocity = 0f;
-        } else {
-            updateLyricSpring(active, targetScroll, dt, interlude.active());
-        }
-        lyricLayerBlitOffsetY = useLineLyricTextures() ? 0f : lyricRenderScroll - lyricScroll;
-        updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude);
+        lyricScroll = 0f;
+        lyricScrollVelocity = 0f;
+        lyricLayerBlitOffsetY = useLineLyricTextures() ? 0f : lyricRenderScroll;
+        updateLyricLineAnimations(active, currentSeconds, s, dt, snap, interlude, draggingProgress);
         if (!useLineLyricTextures() && lyricLayerAnimating()) lyricsLayerDirty = true;
         lyricSnapOnNextRender = false;
     }
 
     private boolean lyricLayerAnimating() {
-        if (Math.abs(lyricScrollVelocity) > 0.01f) return true;
-        if (interludeOpacity > 0.001f && currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack)) return true;
+        if (lyricPositionAnimating()) return true;
         for (CachedLyricLine line : lyricCache) {
             if (line == null) continue;
-            if (Math.abs(line.velocityY) > 0.01f) return true;
-            if (Math.abs(line.velocityScale) > 0.0005f) return true;
             if (Math.abs(line.velocityOpacity) > 0.0005f) return true;
             if (Math.abs(line.velocityBlur) > 0.001f) return true;
         }
         return false;
     }
 
-    private float lyricScrollTarget(int active, float s, InterludeState interlude) {
-        		float target = 0f;
-        		int count = Math.min(Math.max(active, 0), lyricLines.size());
-        		float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
-        		for (int i = 0; i < count; i++) {
-        			if (isAttachedBgLine(i)) continue;
-        			target += getLyricGroupHeight(i, active, s);
-        			if (interlude.active() && i == interlude.anchor()) target += slotHeight;
-        		}
-        if (active >= 0 && active < lyricLines.size()) target += getLyricGroupHeight(active, active, s) * 0.5f;
-        return target;
+    private boolean lyricPositionAnimating() {
+        if (Math.abs(lyricScrollVelocity) > 0.01f) return true;
+        if (interludeOpacity > 0.001f && currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack)) return true;
+        for (CachedLyricLine line : lyricCache) {
+            if (line == null) continue;
+            if (Math.abs(line.velocityY) > 0.01f) return true;
+            if (Math.abs(line.velocityScale) > 0.0005f) return true;
+        }
+        return false;
     }
 
-    private SpringParams lyricSpringParams(int active, boolean isInterludeActive) {
-        if (isInterludeActive) return new SpringParams(90f, 15f);
-        float stiffness = 90f;
-        float damping = 15f;
-        if (active > 0 && active < lyricLines.size()) {
-            float intervalMs = (lyricLines.get(active).startTime() - lyricLines.get(active - 1).startTime()) * 1000f;
-            float clampedInterval = clamp(intervalMs, 100f, 800f);
-            float ratio = 1f - (clampedInterval - 100f) / 700f;
-            ratio = (float) Math.pow(ratio, 0.2f);
-            stiffness = 170f + ratio * 50f;
-            damping = (float) Math.sqrt(stiffness) * 2.2f;
+
+
+    private SpringParams lyricSpringParams(int active, boolean isInterludeActive, boolean isSeeking) {
+        if (isSeeking || isInterludeActive) return new SpringParams(90f, 15f);
+        if (active <= 0 || active >= lyricLines.size()) return new SpringParams(170f, 28f);
+
+        int currentMain = groupMainIndex(active);
+        int prevMain = -1;
+        for (int j = currentMain - 1; j >= 0; j--) {
+            if (!isAttachedBgLine(j)) { prevMain = j; break; }
         }
+
+        if (prevMain == -1) return new SpringParams(170f, 28f);
+
+        float intervalMs = (groupStartTime(currentMain) - groupStartTime(prevMain)) * 1000f;
+        float clampedInterval = clamp(intervalMs, 100f, 800f);
+        float ratio = 1f - (clampedInterval - 100f) / 700f;
+        ratio = (float) Math.pow(ratio, 0.2f);
+        float stiffness = 170f + ratio * 50f;
+        float damping = (float) Math.sqrt(stiffness) * 2.2f;
         return new SpringParams(stiffness, damping);
     }
 
-    private void updateLyricSpring(int active, float targetScroll, float dt, boolean isInterludeActive) {
-        float safeDt = clamp(dt, 0f, 0.05f);
-        SpringParams params = lyricSpringParams(active, isInterludeActive);
-        float displacement = targetScroll - lyricScroll;
-        lyricScrollVelocity += displacement * params.stiffness() * safeDt;
-        lyricScrollVelocity *= (float) Math.exp(-params.damping() * safeDt);
-        lyricScroll += lyricScrollVelocity * safeDt;
-        if (Math.abs(displacement) < 0.25f && Math.abs(lyricScrollVelocity) < 0.35f) {
-            lyricScroll = targetScroll;
-            lyricScrollVelocity = 0f;
-        }
-    }
 
-    private void updateLyricLineAnimations(int active, float currentSeconds, float s, float dt, boolean snap, InterludeState interlude) {
+
+    private void updateLyricLineAnimations(int active, float currentSeconds, float s, float dt, boolean snap, InterludeState interlude, boolean isSeeking) {
         if (lyricCache.size() != lyricLines.size()) return;
         float safeDt = clamp(dt, 0f, 0.05f);
-        SpringParams params = lyricSpringParams(active, interlude.active());
-        float slotHeight = interlude.active() ? interludeSlotHeight(s) : 0f;
+        SpringParams params = lyricSpringParams(active, interlude.active(), isSeeking);
         boolean showDots = interlude.active();
         float anchorY = layoutLyricAnchorY > 0f ? layoutLyricAnchorY : layoutLyricTop + layoutLyricH * 0.35f;
-        float baseY = anchorY - lyricScroll;
-        float offsetY = 0f;
-        boolean dotsPlaced = false;
+
+        float dotMargin = amllInterludeDotMargin();
+        float totalInterludeHeight = amllInterludeDotsOuterHeight() + dotMargin * 2f;
+
+        float scrollOffset = 0f;
+        int targetAlignIndex = Math.min(Math.max(groupMainIndex(active), 0), lyricLines.size());
+        for (int i = 0; i < targetAlignIndex; i++) {
+            if (isAttachedBgLine(i)) continue;
+            scrollOffset += getLyricGroupHeight(i, active, s);
+        }
+        if (targetAlignIndex >= 0 && targetAlignIndex < lyricLines.size()) {
+            scrollOffset += getLyricGroupHeight(targetAlignIndex, active, s) * 0.5f;
+        }
+
+        float curPos = anchorY - scrollOffset - lyricScroll;
+        if (interlude.active() && interlude.anchor() != -1) {
+            curPos -= totalInterludeHeight;
+        }
+
+        float dotTargetY = interludeY;
+        boolean setDots = false;
+        float delay = 0f;
+        float baseDelay = snap ? 0f : 0.05f;
+
         for (int i = 0; i < lyricCache.size(); i++) {
             if (isAttachedBgLine(i)) continue;
-            if (interlude.active() && !dotsPlaced && i == interlude.anchor() + 1) {
-                updateInterludeAnimation(showDots ? baseY + offsetY : interludeY, showDots, s, safeDt, snap);
-                offsetY += slotHeight;
-                dotsPlaced = true;
+
+            boolean shouldShowDots = interlude.active() && i == interlude.anchor() + 1;
+            if (!setDots && shouldShowDots) {
+                setDots = true;
+                curPos += dotMargin;
+                dotTargetY = curPos;
+                curPos += amllInterludeDotsOuterHeight();
+                curPos += dotMargin;
             }
 
             CachedLyricLine line = lyricCache.get(i);
             LyricPresentation presentation = computeLyricPresentation(i, active);
-            float targetY = baseY + offsetY;
+            float targetY = curPos;
             boolean dynamicMask = isActiveLine(i, active) && line.lineRef != null && line.lineRef.isDynamic();
-            updateCachedLyricLine(line, targetY, presentation, params, safeDt, snap, computeAMLLGroupBlur(i), dynamicMask);
+            updateCachedLyricLine(line, targetY, presentation, params, safeDt, snap, computeAMLLGroupBlur(i), dynamicMask, false, delay);
 
             int bgIndex = attachedBgIndex(i);
             float groupH = getLineContentHeight(i, active, s);
@@ -1535,35 +1583,43 @@ public class Musicpage extends Screen {
                 float bgTargetY = targetY + groupH + bgH * (bgSlideY / 100f);
                 LyricPresentation bgPresentation = new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.8f);
                 boolean bgDynamicMask = isActiveLine(bgIndex, active) && bgLine.lineRef != null && bgLine.lineRef.isDynamic();
-                updateCachedLyricLine(bgLine, bgTargetY, bgPresentation, params, safeDt, snap, computeAMLLGroupBlur(bgIndex), bgDynamicMask);
+                updateCachedLyricLine(bgLine, bgTargetY, bgPresentation, params, safeDt, snap, computeAMLLGroupBlur(bgIndex), bgDynamicMask, true, delay);
                 if (groupActive) groupH += bgH;
             }
 
-            			offsetY += groupH;
-            			if (interlude.active() && !dotsPlaced && i == interlude.anchor()) {
-                updateInterludeAnimation(showDots ? baseY + offsetY : interludeY, showDots, s, safeDt, snap);
-                offsetY += slotHeight;
-                dotsPlaced = true;
+            curPos += groupH;
+            if (curPos >= layoutLyricTop && !isSeeking) {
+                delay += baseDelay;
+                if (i >= targetAlignIndex) baseDelay /= 1.05f;
             }
         }
+
+        if (interlude.active() && !setDots && interlude.anchor() == lyricCache.size() - 1) {
+            curPos += dotMargin;
+            dotTargetY = curPos;
+        }
+
         if (showDots) {
             interludeAnchor = interlude.anchor();
             interludeStartTime = interlude.start();
             interludeEndTime = interlude.end();
             interludeNextDuet = interlude.nextDuet();
             interludeCurrentTime = currentSeconds;
-            if (!dotsPlaced) updateInterludeAnimation(baseY + offsetY, true, s, safeDt, snap);
-        } else if (!dotsPlaced || interludeOpacity > 0.001f) {
+            updateInterludeAnimation(dotTargetY, true, s, safeDt, snap);
+        } else if (interludeOpacity > 0.001f) {
             updateInterludeAnimation(interludeY, false, s, safeDt, snap);
         }
     }
 
-    private void updateCachedLyricLine(CachedLyricLine line, float targetY, LyricPresentation presentation, SpringParams params, float safeDt, boolean snap, float targetBlur, boolean dynamicMask) {
+    private void updateCachedLyricLine(CachedLyricLine line, float targetY, LyricPresentation presentation, SpringParams params, float safeDt, boolean snap, float targetBlur, boolean dynamicMask, boolean bgLineSpring, float delay) {
         if (!line.initialized || snap) {
             line.currentY = targetY;
             line.velocityY = 0f;
+            line.ySpring.setPosition(targetY);
+            line.lastDelayedTargetY = targetY;
             line.currentScale = presentation.scale();
             line.velocityScale = 0f;
+            line.scaleSpring.setPosition(presentation.scale());
             line.currentOpacity = presentation.opacity();
             line.velocityOpacity = 0f;
             line.currentBlurVisual = targetBlur;
@@ -1573,45 +1629,64 @@ public class Musicpage extends Screen {
             return;
         }
 
-        float dy = targetY - line.currentY;
-        line.velocityY += dy * params.stiffness() * safeDt;
-        line.velocityY *= (float) Math.exp(-params.damping() * safeDt);
-        line.currentY += line.velocityY * safeDt;
+        if (safeDt > 0f) {
+            line.ySpring.updateParams(0.9f, params.stiffness(), params.damping());
+            float targetDelay = delay;
+            if (Float.isFinite(line.lastDelayedTargetY) && Math.abs(line.lastDelayedTargetY - targetY) <= 0.5f) {
+                targetDelay = 0f;
+            } else {
+                line.lastDelayedTargetY = targetY;
+            }
+            line.ySpring.setTargetPosition(targetY, targetDelay);
+            line.ySpring.update(safeDt);
+            line.currentY = line.ySpring.getCurrentPosition();
+            line.velocityY = line.ySpring.getCurrentVelocity();
 
-        float scaleStiffness = params.stiffness() * 1.08f;
-        float scaleDamping = (float) Math.sqrt(scaleStiffness) * 2.15f;
-        float ds = presentation.scale() - line.currentScale;
-        line.velocityScale += ds * scaleStiffness * safeDt;
-        line.velocityScale *= (float) Math.exp(-scaleDamping * safeDt);
-        line.currentScale += line.velocityScale * safeDt;
+            float scaleStiffness = 100f;
+            float scaleDamping = 25f;
+            float scaleMass = 2f;
+            if (bgLineSpring) {
+                scaleStiffness = 50f;
+                scaleDamping = 20f;
+                scaleMass = 1f;
+            }
+            line.scaleSpring.updateParams(scaleMass, scaleStiffness, scaleDamping);
+            line.scaleSpring.setTargetPosition(presentation.scale(), 0f);
+            line.scaleSpring.update(safeDt);
+            line.currentScale = line.scaleSpring.getCurrentPosition();
+            line.velocityScale = line.scaleSpring.getCurrentVelocity();
 
-        float opacityStiffness = params.stiffness() * 1.35f;
-        float opacityDamping = (float) Math.sqrt(opacityStiffness) * 2.1f;
-        float da = presentation.opacity() - line.currentOpacity;
-        line.velocityOpacity += da * opacityStiffness * safeDt;
-        line.velocityOpacity *= (float) Math.exp(-opacityDamping * safeDt);
-        line.currentOpacity += line.velocityOpacity * safeDt;
+            float opacityStiffness = 100f;
+            float opacityDamping = 20f;
+            float oldOpacity = line.currentOpacity;
+            float oldOpacityVelocity = line.velocityOpacity;
+            line.currentOpacity = solveSpring(oldOpacity, oldOpacityVelocity, presentation.opacity(), 1f, opacityStiffness, opacityDamping, safeDt);
+            line.velocityOpacity = getSpringVelocity(oldOpacity, oldOpacityVelocity, presentation.opacity(), 1f, opacityStiffness, opacityDamping, safeDt);
 
-        float blurStiffness = params.stiffness() * 0.82f;
-        float blurDamping = (float) Math.sqrt(blurStiffness) * 2.0f;
-        float db = targetBlur - line.currentBlurVisual;
-        line.velocityBlur += db * blurStiffness * safeDt;
-        line.velocityBlur *= (float) Math.exp(-blurDamping * safeDt);
-        line.currentBlurVisual += line.velocityBlur * safeDt;
+            float blurStiffness = 80f;
+            float blurDamping = 18f;
+            float oldBlur = line.currentBlurVisual;
+            float oldBlurVelocity = line.velocityBlur;
+            line.currentBlurVisual = solveSpring(oldBlur, oldBlurVelocity, targetBlur, 1f, blurStiffness, blurDamping, safeDt);
+            line.velocityBlur = getSpringVelocity(oldBlur, oldBlurVelocity, targetBlur, 1f, blurStiffness, blurDamping, safeDt);
+        }
 
-        if (Math.abs(dy) < 0.20f && Math.abs(line.velocityY) < 0.30f) {
+        if (Math.abs(targetY - line.currentY) < 0.20f && Math.abs(line.velocityY) < 0.30f) {
             line.currentY = targetY;
             line.velocityY = 0f;
+            line.ySpring.setPosition(targetY);
+            line.lastDelayedTargetY = targetY;
         }
-        if (Math.abs(ds) < 0.002f && Math.abs(line.velocityScale) < 0.002f) {
+        if (Math.abs(presentation.scale() - line.currentScale) < 0.002f && Math.abs(line.velocityScale) < 0.002f) {
             line.currentScale = presentation.scale();
             line.velocityScale = 0f;
+            line.scaleSpring.setPosition(presentation.scale());
         }
-        if (Math.abs(da) < 0.002f && Math.abs(line.velocityOpacity) < 0.002f) {
+        if (Math.abs(presentation.opacity() - line.currentOpacity) < 0.002f && Math.abs(line.velocityOpacity) < 0.002f) {
             line.currentOpacity = presentation.opacity();
             line.velocityOpacity = 0f;
         }
-        if (Math.abs(db) < 0.01f && Math.abs(line.velocityBlur) < 0.01f) {
+        if (Math.abs(targetBlur - line.currentBlurVisual) < 0.01f && Math.abs(line.velocityBlur) < 0.01f) {
             line.currentBlurVisual = targetBlur;
             line.velocityBlur = 0f;
         }
@@ -1640,27 +1715,59 @@ public class Musicpage extends Screen {
         else line.currentDarkAlpha += (line.targetDarkAlpha - line.currentDarkAlpha) * darkFactor;
     }
 
+    private float groupEndTime(int mainIndex) {
+        if (mainIndex < 0 || mainIndex >= lyricLines.size()) return 0f;
+        int bgIndex = attachedBgIndex(mainIndex);
+        float end = lyricLines.get(mainIndex).endTime();
+        if (bgIndex >= 0) end = Math.max(end, lyricLines.get(bgIndex).endTime());
+        return end;
+    }
+
+    private float groupStartTime(int mainIndex) {
+        if (mainIndex < 0 || mainIndex >= lyricLines.size()) return 0f;
+        int bgIndex = attachedBgIndex(mainIndex);
+        float start = lyricLines.get(mainIndex).startTime();
+        if (bgIndex >= 0) start = Math.min(start, lyricLines.get(bgIndex).startTime());
+        return start;
+    }
+
     private InterludeState computeInterlude(int active, float currentSeconds) {
         if (lyricLines.isEmpty()) return new InterludeState(false, Integer.MIN_VALUE, 0f, 0f, false);
 
         float currentTimeMs = currentSeconds * 1000f + 20f;
-        int checkActive = active;
+        int checkActive = groupMainIndex(active);
 
-        for (int k = checkActive - 1; k <= checkActive + 1; k++) {
-            if (k < -1 || k >= lyricLines.size() - 1) continue;
-            float gapStartMs;
-            if (k == -1) {
-                gapStartMs = 0f;
-            } else {
-                gapStartMs = lyricLines.get(k).endTime() * 1000f;
+        int prevGroup = -1;
+        for (int j = checkActive - 1; j >= 0; j--) {
+            if (!isAttachedBgLine(j)) { prevGroup = j; break; }
+        }
+        int nextGroup = -1;
+        for (int j = checkActive + 1; j < lyricLines.size(); j++) {
+            if (!isAttachedBgLine(j)) { nextGroup = j; break; }
+        }
+
+        int[] anchors = {prevGroup, checkActive, nextGroup};
+        for (int k : anchors) {
+            if (k >= lyricLines.size() - 1) continue;
+
+            float gapStartMs = k == -1 ? 0f : groupEndTime(k) * 1000f;
+
+            int nextValidGroup = -1;
+            for (int j = k + 1; j < lyricLines.size(); j++) {
+                if (!isAttachedBgLine(j)) { nextValidGroup = j; break; }
             }
-            float gapEndMs = Math.max(gapStartMs, lyricLines.get(k + 1).startTime() * 1000f - 250f);
+            if (nextValidGroup == -1) continue;
+
+            float gapEndMs = Math.max(gapStartMs, groupStartTime(nextValidGroup) * 1000f - 250f);
 
             if (gapEndMs - gapStartMs < 4000f) continue;
 
             if (gapEndMs > currentTimeMs && gapStartMs < currentTimeMs) {
-                boolean nextDuet = lyricLines.get(k + 1).isDuet();
-                return new InterludeState(true, k, gapStartMs / 1000f, gapEndMs / 1000f, nextDuet);
+                boolean nextDuet = lyricLines.get(nextValidGroup).isDuet();
+                float startMs = interludeAnchor == k && interludeOpacity > 0.001f
+                        ? interludeStartTime * 1000f
+                        : Math.max(gapStartMs, currentTimeMs);
+                return new InterludeState(true, k, startMs / 1000f, gapEndMs / 1000f, nextDuet);
             }
         }
 
@@ -1668,14 +1775,18 @@ public class Musicpage extends Screen {
     }
 
     private InterludeState closingInterludeState(int fallbackAnchor) {
-        if (interludeOpacity > 0.001f && interludeAnchor != Integer.MIN_VALUE) return new InterludeState(false, interludeAnchor, interludeStartTime, interludeEndTime, false);
+        if (interludeOpacity > 0.001f && interludeAnchor != Integer.MIN_VALUE) return new InterludeState(false, interludeAnchor, interludeStartTime, interludeEndTime, interludeNextDuet);
         return new InterludeState(false, fallbackAnchor, 0f, 0f, false);
     }
 
 
 
     private float interludeSlotHeight(float s) {
-        return amllInterludeDotSize() + amllInterludeDotMargin() * 2f;
+        return amllInterludeDotsOuterHeight() + amllInterludeDotMargin() * 2f;
+    }
+
+    private float interludeElementTop(float slotTop) {
+        return slotTop + amllInterludeDotMargin();
     }
 
     private void updateInterludeAnimation(float targetY, boolean visible, float s, float dt, boolean snap) {
@@ -1683,26 +1794,29 @@ public class Musicpage extends Screen {
         if (snap) {
             interludeY = targetY;
             interludeVelocityY = 0f;
+            interludeSpring.setPosition(targetY);
             interludeOpacity = targetOpacity;
             return;
         }
 
         float safeDt = clamp(dt, 0f, 0.05f);
-        float stiffness = 90f;
-        float damping = 15f;
-        float dy = targetY - interludeY;
-        interludeVelocityY += dy * stiffness * safeDt;
-        interludeVelocityY *= (float) Math.exp(-damping * safeDt);
-        interludeY += interludeVelocityY * safeDt;
+        if (safeDt > 0f) {
+            interludeSpring.updateParams(0.9f, 90f, 15f);
+            interludeSpring.setTargetPosition(targetY, 0f);
+            interludeSpring.update(safeDt);
+            interludeY = interludeSpring.getCurrentPosition();
+            interludeVelocityY = interludeSpring.getCurrentVelocity();
+        }
 
         float opacityDuration = 0.25f;
         float opacityStep = safeDt / Math.max(0.001f, opacityDuration);
         if (interludeOpacity < targetOpacity) interludeOpacity = Math.min(targetOpacity, interludeOpacity + opacityStep);
         else if (interludeOpacity > targetOpacity) interludeOpacity = Math.max(targetOpacity, interludeOpacity - opacityStep);
 
-        if (Math.abs(dy) < 0.20f && Math.abs(interludeVelocityY) < 0.30f) {
+        if (Math.abs(targetY - interludeY) < 0.20f && Math.abs(interludeVelocityY) < 0.30f) {
             interludeY = targetY;
             interludeVelocityY = 0f;
+            interludeSpring.setPosition(targetY);
         }
     }
 
@@ -3307,7 +3421,7 @@ public class Musicpage extends Screen {
         if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
             float currentSeconds = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
             InterludeState interlude = computeInterlude(active, currentSeconds);
-            updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude);
+            updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude, false);
         }
         if (lyricCache.size() != lyricLines.size()) return false;
         if (lyricCache.isEmpty()) return true;
@@ -3330,15 +3444,12 @@ public class Musicpage extends Screen {
         float overscan = amllCssPx(300f);
         float overscanTop = clipY - overscan;
         float overscanBottom = clipY + clipH + overscan;
-        boolean allowNewBlurBake = !lyricLayerAnimating();
-        bakedBlurBudgetThisFrame = 0;
         for (int i = 0; i < lyricCache.size(); i++) {
             CachedLyricLine line = lyricCache.get(i);
             boolean isActive = isActiveLine(i, active);
             float blurLevel = line.currentBlurVisual;
             boolean useBlur = shouldUseAMLLLineBlur(isActive, blurLevel);
             SkijaRenderer lineRenderer = isActive ? line.activeRenderer : line.inactiveRenderer;
-            Image lineImage = isActive ? line.activeImage : line.inactiveImage;
             if (lineRenderer == null || !line.initialized) continue;
             float alpha = clamp(line.currentOpacity * globalAlpha, 0f, 1f);
             if (alpha <= 0.01f) continue;
@@ -3358,25 +3469,21 @@ public class Musicpage extends Screen {
             float drawY = originY + (rawY - originY) * scale;
             float drawW = texW * scale;
             float drawH = texH * scale;
-            if (drawY + drawH < overscanTop || drawY > overscanBottom) continue;
+            boolean inDrawOverscan = drawY + drawH >= overscanTop && drawY <= overscanBottom;
+            if (!inDrawOverscan) continue;
             alpha *= amllLyricEdgeMaskAlpha(drawY, drawH, clipY, clipH);
             if (alpha <= 0.01f) continue;
             if (useBlur) {
-                int targetStep = amllBlurStep(blurLevel);
-                boolean alreadyBaked = line.bakedBlurImage != null && line.bakedBlurRenderer != null && line.bakedBlurStep == targetStep;
-                boolean canBake = alreadyBaked || (allowNewBlurBake && bakedBlurBudgetThisFrame < 1);
-                if (canBake && ensureBakedBlur(line, lineImage, texW, texH, blurLevel)) {
-                    if (!alreadyBaked) bakedBlurBudgetThisFrame++;
-                    float bakedPad = line.bakedBlurPad * scale;
-                    blitRendererClippedAlpha(g, line.bakedBlurRenderer, drawX - bakedPad, drawY - bakedPad, line.bakedBlurW * scale, line.bakedBlurH * scale, alpha, clipX, clipY, clipW, clipH);
-                    continue;
-                }
+                blitRendererClippedAMLLBlur(g, lineRenderer, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH, blurLevel);
+                continue;
             }
             blitRendererClippedAlpha(g, lineRenderer, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH);
         }
         blitInterludeDots(g, s, clipX, clipY, clipW, clipH, globalAlpha);
         return true;
     }
+
+
 
     private float computeAMLLGroupBlur(int index) {
         return computeAMLLLineBlur(groupMainIndex(index));
@@ -3409,15 +3516,10 @@ public class Musicpage extends Screen {
         return amllCssPx(clamp(blurLevel, 0f, 5f));
     }
 
-    private int amllBlurStep(float blurLevel) {
-        float cssRadius = clamp(blurLevel, 0f, 5f);
-        if (cssRadius <= 0.05f) return 0;
-        return Math.max(1, Math.round(cssRadius));
+    private float amllBlurRadiusCss(float blurLevel) {
+        return clamp(blurLevel, 0f, 5f);
     }
 
-    private float amllBlurRadiusForStep(int step) {
-        return amllCssPx(clamp(step, 0, 5));
-    }
 
     private void blitAMLLSoftBlurredLine(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y, float w, float h, float alpha, float clipX, float clipY, float clipW, float clipH, float blurLevel) {
         float radius = amllBlurRadius(blurLevel);
@@ -3456,7 +3558,8 @@ public class Musicpage extends Screen {
 
     private void blitInterludeDots(GuiGraphicsExtractor g, float s, float clipX, float clipY, float clipW, float clipH, float globalAlpha) {
         if (interludeOpacity <= 0.01f) return;
-        if (!ensureInterludeDotRenderer(s)) return;
+        TextureSetup dummySetup = amllDotTextureSetup();
+        if (dummySetup == null) return;
         float duration = Math.max(0.001f, interludeEndTime - interludeStartTime);
         float current = clamp(interludeCurrentTime - interludeStartTime, 0f, duration);
         float interludeDuration = duration * 1000f;
@@ -3476,22 +3579,97 @@ public class Musicpage extends Screen {
 
         float dot = amllInterludeDotSize();
         float gap = amllInterludeDotGap();
-        float contentW = dot * 3f + gap * 2f;
-        float baseX = interludeNextDuet
-                ? layoutRightX + layoutRightW - contentW * groupScale - amllInterludeDotPaddingX()
-                : layoutRightX + amllInterludeDotPaddingX();
-        float baseY = interludeY + interludeSlotHeight(s) * 0.5f;
+        float marginRight = amllInterludeDotMarginRight();
+        float paddingX = amllInterludeDotPaddingX();
+        float paddingY = amllInterludeDotPaddingY();
+        float outerW = amllInterludeDotsOuterWidth();
+        float outerH = amllInterludeDotsOuterHeight();
+        float elementX = interludeNextDuet ? layoutRightX + layoutRightW - outerW : layoutRightX;
+        float elementY = interludeY;
+        float scaledX = elementX + outerW * (1f - groupScale) * 0.5f;
+        float scaledY = elementY + outerH * (1f - groupScale) * 0.5f;
+        float dotBaseX = scaledX + paddingX * groupScale;
+        float dotBaseY = scaledY + paddingY * groupScale;
+        float size = dot * groupScale;
+        float step = (dot + marginRight + gap) * groupScale;
 
         float dot0Opacity = clamp(0.25f, currentDuration * 3f / dotsDuration * 0.75f, 1f);
         float dot1Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f) * 3f / dotsDuration * 0.75f, 1f);
         float dot2Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f * 2f) * 3f / dotsDuration * 0.75f, 1f);
+        float alpha0 = clamp01(interludeOpacity * globalOpacity * dot0Opacity * globalAlpha);
+        float alpha1 = clamp01(interludeOpacity * globalOpacity * dot1Opacity * globalAlpha);
+        float alpha2 = clamp01(interludeOpacity * globalOpacity * dot2Opacity * globalAlpha);
+        blitGpuDots(g, dummySetup, dotBaseX, dotBaseY, size, step, alpha0, alpha1, alpha2, clipX, clipY, clipW, clipH);
+    }
 
-        for (int i = 0; i < 3; i++) {
-            float dotOpacity = i == 0 ? dot0Opacity : i == 1 ? dot1Opacity : dot2Opacity;
-            float size = dot * groupScale;
-            float x = baseX + (i * (dot + gap)) * groupScale;
-            float y = baseY - size * 0.5f;
-            blitRendererClippedAlpha(g, interludeDotRenderer, x, y, size, size, clamp01(interludeOpacity * globalOpacity * dotOpacity * globalAlpha), clipX, clipY, clipW, clipH);
+    private TextureSetup amllDotTextureSetup() {
+        SkijaRenderer source = staticRenderer != null ? staticRenderer : controlsRenderer;
+        if (source == null) source = lyricsRenderer;
+        if (source == null) source = bgRenderer;
+        if (source == null) return null;
+        AbstractTexture texture = Minecraft.getInstance().getTextureManager().getTexture(source.textureId());
+        if (texture == null || texture.getTextureView() == null) return null;
+        return TextureSetup.singleTexture(texture.getTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST));
+    }
+
+    private void blitGpuDots(GuiGraphicsExtractor g, TextureSetup dummySetup, float x, float y, float size, float step, float alpha0, float alpha1, float alpha2, float clipX, float clipY, float clipW, float clipH) {
+        if (size <= 0.5f) return;
+        int a0 = Math.max(0, Math.min(255, Math.round(clamp(alpha0, 0f, 1f) * 255f)));
+        int a1 = Math.max(0, Math.min(255, Math.round(clamp(alpha1, 0f, 1f) * 255f)));
+        int a2 = Math.max(0, Math.min(255, Math.round(clamp(alpha2, 0f, 1f) * 255f)));
+        if (a0 <= 2 && a1 <= 2 && a2 <= 2) return;
+        float x1 = x + step;
+        float x2 = x + step * 2f;
+        float left = Math.max(Math.min(x, Math.min(x1, x2)), clipX);
+        float top = Math.max(y, clipY);
+        float right = Math.min(Math.max(x + size, Math.max(x1 + size, x2 + size)), clipX + clipW);
+        float bottom = Math.min(y + size, clipY + clipH);
+        if (right <= left + 0.5f || bottom <= top + 0.5f) return;
+
+        Matrix3x2f pose = new Matrix3x2f(g.pose());
+        ScreenRectangle scissor = g.scissorStack.peek();
+        int bx = (int) Math.floor(left);
+        int by = (int) Math.floor(top);
+        int bw = Math.max(1, (int) Math.ceil(right) - bx);
+        int bh = Math.max(1, (int) Math.ceil(bottom) - by);
+        ScreenRectangle bounds = new ScreenRectangle(bx, by, bw, bh).transformMaxBounds(pose);
+        g.guiRenderState.addGuiElement(new DotsQuadRenderState(AMLL_DOT_PIPELINE, dummySetup, pose, x, x1, x2, y, size, a0, a1, a2, clipX, clipY, clipW, clipH, scissor, bounds));
+    }
+
+    private record DotsQuadRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
+                                       float x0, float x1, float x2, float y, float size,
+                                       int alpha0, int alpha1, int alpha2,
+                                       float clipX, float clipY, float clipW, float clipH,
+                                       ScreenRectangle scissorArea, ScreenRectangle bounds)
+            implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
+        @Override
+        public void buildVertices(VertexConsumer vertexConsumer) {
+            addDot(vertexConsumer, x0, alpha0);
+            addDot(vertexConsumer, x1, alpha1);
+            addDot(vertexConsumer, x2, alpha2);
+        }
+
+        private void addDot(VertexConsumer vertexConsumer, float x, int alpha) {
+            if (alpha <= 0 || size <= 0.5f) return;
+            float left = Math.max(x, clipX);
+            float top = Math.max(y, clipY);
+            float right = Math.min(x + size, clipX + clipW);
+            float bottom = Math.min(y + size, clipY + clipH);
+            if (right <= left + 0.5f || bottom <= top + 0.5f) return;
+            float u0 = (left - x) / size;
+            float v0 = (top - y) / size;
+            float u1 = (right - x) / size;
+            float v1 = (bottom - y) / size;
+            addVertex(vertexConsumer, left, top, u0, v0, alpha);
+            addVertex(vertexConsumer, left, bottom, u0, v1, alpha);
+            addVertex(vertexConsumer, right, bottom, u1, v1, alpha);
+            addVertex(vertexConsumer, right, top, u1, v0, alpha);
+        }
+
+        private void addVertex(VertexConsumer vertexConsumer, float vx, float vy, float u, float v, int alpha) {
+            vertexConsumer.addVertexWith2DPose(pose, vx, vy)
+                    .setUv(u, v)
+                    .setColor(255, 255, 255, alpha);
         }
     }
 
@@ -3516,11 +3694,17 @@ public class Musicpage extends Screen {
 
         float dot = amllInterludeDotSize();
         float gap = amllInterludeDotGap();
-        float contentW = dot * 3f + gap * 2f;
-        float baseX = interludeNextDuet
-                ? layoutRightX + layoutRightW - contentW * groupScale - amllInterludeDotPaddingX()
-                : layoutRightX + amllInterludeDotPaddingX();
-        float baseY = interludeY + interludeSlotHeight(s) * 0.5f;
+        float marginRight = amllInterludeDotMarginRight();
+        float paddingX = amllInterludeDotPaddingX();
+        float paddingY = amllInterludeDotPaddingY();
+        float outerW = amllInterludeDotsOuterWidth();
+        float outerH = amllInterludeDotsOuterHeight();
+        float elementX = interludeNextDuet ? layoutRightX + layoutRightW - outerW : layoutRightX;
+        float elementY = interludeY;
+        float scaledX = elementX + outerW * (1f - groupScale) * 0.5f;
+        float scaledY = elementY + outerH * (1f - groupScale) * 0.5f;
+        float dotBaseX = scaledX + paddingX * groupScale;
+        float dotBaseY = scaledY + paddingY * groupScale;
 
         float dot0Opacity = clamp(0.25f, currentDuration * 3f / dotsDuration * 0.75f, 1f);
         float dot1Opacity = clamp(0.25f, (currentDuration - dotsDuration / 3f) * 3f / dotsDuration * 0.75f, 1f);
@@ -3531,8 +3715,8 @@ public class Musicpage extends Screen {
             for (int i = 0; i < 3; i++) {
                 float dotOpacity = i == 0 ? dot0Opacity : i == 1 ? dot1Opacity : dot2Opacity;
                 float size = dot * groupScale;
-                float x = baseX + (i * (dot + gap)) * groupScale;
-                float y = baseY - size * 0.5f;
+                float x = dotBaseX + (i * (dot + marginRight + gap)) * groupScale;
+                float y = dotBaseY;
                 if (x + size < clipX || x > clipX + clipW || y + size < clipY || y > clipY + clipH) continue;
                 float alpha = clamp01(interludeOpacity * globalOpacity * dotOpacity);
                 if (alpha <= 0.01f) continue;
@@ -3542,26 +3726,7 @@ public class Musicpage extends Screen {
         }
     }
 
-    private boolean ensureInterludeDotRenderer(float s) {
-        float dot = amllInterludeDotSize();
-        if (interludeDotRenderer != null && Math.abs(interludeDotScale - dot) < 0.001f) return true;
-        if (interludeDotRenderer != null) interludeDotRenderer.close();
-        interludeDotScale = dot;
-        int size = Math.max(2, Math.round(dot * guiScale));
-        interludeDotRenderer = new SkijaRenderer("music_page_interlude_dot", size, size);
-        interludeDotRenderer.clear(0x00000000);
-        Canvas c = interludeDotRenderer.canvas();
-        c.save();
-        c.scale(guiScale, guiScale);
-        try (Paint paint = new Paint()) {
-            paint.setAntiAlias(true);
-            paint.setColor(WHITE);
-            c.drawCircle(dot * 0.5f, dot * 0.5f, dot * 0.5f, paint);
-        }
-        c.restore();
-        interludeDotRenderer.upload();
-        return true;
-    }
+
 
     private void blitRendererClippedAlpha(GuiGraphicsExtractor g, SkijaRenderer r, float dstX, float dstY, float dstW, float dstH, float alpha, float clipX, float clipY, float clipW, float clipH) {
         if (r == null || dstW <= 0.5f || dstH <= 0.5f || clipW <= 0.5f || clipH <= 0.5f) return;
@@ -3575,6 +3740,43 @@ public class Musicpage extends Screen {
         float u1 = (right - dstX) / dstW;
         float v1 = (bottom - dstY) / dstH;
         blitRendererAlpha(g, r, left, top, right - left, bottom - top, u0, v0, u1, v1, alpha);
+    }
+
+    private void blitRendererClippedAMLLBlur(GuiGraphicsExtractor g, SkijaRenderer r, float dstX, float dstY, float dstW, float dstH, float alpha, float clipX, float clipY, float clipW, float clipH, float blurLevel) {
+        if (r == null || dstW <= 0.5f || dstH <= 0.5f || clipW <= 0.5f || clipH <= 0.5f) return;
+        float blurRadiusCss = amllBlurRadiusCss(blurLevel);
+        if (blurRadiusCss <= 0.05f) {
+            blitRendererClippedAlpha(g, r, dstX, dstY, dstW, dstH, alpha, clipX, clipY, clipW, clipH);
+            return;
+        }
+        float left = Math.max(dstX, clipX);
+        float top = Math.max(dstY, clipY);
+        float right = Math.min(dstX + dstW, clipX + clipW);
+        float bottom = Math.min(dstY + dstH, clipY + clipH);
+        if (right <= left + 0.5f || bottom <= top + 0.5f) return;
+        float u0 = (left - dstX) / dstW;
+        float v0 = (top - dstY) / dstH;
+        float u1 = (right - dstX) / dstW;
+        float v1 = (bottom - dstY) / dstH;
+        blitRendererAMLLBlur(g, r, left, top, right - left, bottom - top, u0, v0, u1, v1, alpha, blurRadiusCss);
+    }
+
+    private void blitRendererAMLLBlur(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y, float w, float h, float u0, float v0, float u1, float v1, float alpha, float blurRadiusCss) {
+        if (r == null || w <= 0.5f || h <= 0.5f) return;
+        AbstractTexture abstractTexture = Minecraft.getInstance().getTextureManager().getTexture(r.textureId());
+        if (abstractTexture == null || abstractTexture.getTextureView() == null || abstractTexture.getSampler() == null) return;
+        Matrix3x2f pose = new Matrix3x2f(g.pose());
+        ScreenRectangle scissor = g.scissorStack.peek();
+        int bx = (int) Math.floor(x);
+        int by = (int) Math.floor(y);
+        int bw = Math.max(1, (int) Math.ceil(x + w) - bx);
+        int bh = Math.max(1, (int) Math.ceil(y + h) - by);
+        ScreenRectangle bounds = new ScreenRectangle(bx, by, bw, bh).transformMaxBounds(pose);
+        TextureSetup textureSetup = TextureSetup.singleTexture(abstractTexture.getTextureView(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+        int a = Math.max(0, Math.min(255, Math.round(clamp(alpha, 0f, 1f) * 255f)));
+        int blur = Math.max(0, Math.min(255, Math.round(clamp(blurRadiusCss / 5f, 0f, 1f) * 255f)));
+        int gs = Math.max(0, Math.min(255, Math.round(guiScale * 10f)));
+        g.guiRenderState.addGuiElement(new LyricBlurQuadRenderState(AMLL_LYRIC_BLUR_PIPELINE, textureSetup, pose, x, y, w, h, u0, v0, u1, v1, blur, gs, a, scissor, bounds));
     }
 
     private void blitRendererAlpha(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y, float w, float h, float u0, float v0, float u1, float v1, float alpha) {
@@ -3625,6 +3827,27 @@ public class Musicpage extends Screen {
         float u1 = (srcPxX + srcPxW) / (float) r.getWidth();
         float v1 = (srcPxY + srcPxH) / (float) r.getHeight();
         blitRendererAlpha(g, r, dstX, dstY, dstW, dstH, u0, v0, u1, v1, alpha);
+    }
+
+    private record LyricBlurQuadRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2fc pose,
+                                           float x, float y, float w, float h,
+                                           float u0, float v0, float u1, float v1,
+                                           int blurRadiusByte, int guiScaleByte, int alpha,
+                                           ScreenRectangle scissorArea, ScreenRectangle bounds)
+            implements net.minecraft.client.renderer.state.gui.GuiElementRenderState {
+        @Override
+        public void buildVertices(VertexConsumer vertexConsumer) {
+            addVertex(vertexConsumer, x, y, u0, v0);
+            addVertex(vertexConsumer, x, y + h, u0, v1);
+            addVertex(vertexConsumer, x + w, y + h, u1, v1);
+            addVertex(vertexConsumer, x + w, y, u1, v0);
+        }
+
+        private void addVertex(VertexConsumer vertexConsumer, float vx, float vy, float u, float v) {
+            vertexConsumer.addVertexWith2DPose(pose, vx, vy)
+                    .setUv(u, v)
+                    .setColor(blurRadiusByte, guiScaleByte, 255, alpha);
+        }
     }
 
     private void blitRenderer(GuiGraphicsExtractor g, SkijaRenderer r, float x, float y) {
@@ -3749,11 +3972,7 @@ public class Musicpage extends Screen {
             lyricsRenderer.close();
             lyricsRenderer = null;
         }
-        if (interludeDotRenderer != null) {
-            interludeDotRenderer.close();
-            interludeDotRenderer = null;
-        }
-        interludeDotScale = -1f;
+
         renderer = null;
         if (coverImage != null) {
             coverImage.close();
@@ -4055,6 +4274,18 @@ public class Musicpage extends Screen {
         return Math.max(1f, lineWidth - amllLyricLinePaddingX(fontSize) * 2f);
     }
 
+    private float amllLyricSubLineFontSize(float fontSize) {
+        return Math.max(fontSize * 0.5f, amllCssPx(10f));
+    }
+
+    private float amllLyricSubLineHeight(float subLineFontSize) {
+        return Math.max(1f, subLineFontSize * 1.5f);
+    }
+
+    private float amllLyricSubLineOpacity() {
+        return 0.3f;
+    }
+
     private float amllLyricLineGap(float s) {
         return amllLyricFontSize() * 0.3f;
     }
@@ -4065,7 +4296,11 @@ public class Musicpage extends Screen {
     }
 
     private float amllInterludeDotGap() {
-        return amllLyricFontSize() * 0.25f + amllCssPx(4f);
+        return amllLyricFontSize() * 0.25f;
+    }
+
+    private float amllInterludeDotMarginRight() {
+        return amllCssPx(4f);
     }
 
     private float amllInterludeDotMargin() {
@@ -4078,6 +4313,18 @@ public class Musicpage extends Screen {
 
     private float amllInterludeDotPaddingY() {
         return Math.max(0f, layoutRightW * 0.025f);
+    }
+
+    private float amllInterludeDotsContentWidth() {
+        return amllInterludeDotSize() * 3f + amllInterludeDotGap() * 2f + amllInterludeDotMarginRight() * 3f;
+    }
+
+    private float amllInterludeDotsOuterWidth() {
+        return amllInterludeDotsContentWidth() + amllInterludeDotPaddingX() * 2f;
+    }
+
+    private float amllInterludeDotsOuterHeight() {
+        return amllInterludeDotSize() + amllInterludeDotPaddingY() * 2f;
     }
 
     private float fitTextSize(String text, Typeface tf, float preferredSize, float minSize, float maxWidth) {

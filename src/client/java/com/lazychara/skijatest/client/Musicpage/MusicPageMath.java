@@ -83,5 +83,25 @@ final class MusicPageMath {
 
 
 
-    private MusicPageMath() {}
+    static float solveSpring(float from, float velocity, float to, float mass, float stiffness, float damping, float dt) {
+        float delta = to - from;
+        if (delta == 0f && velocity == 0f) return to;
+        float dampingRatio = damping / (2f * (float) Math.sqrt(stiffness * mass));
+        if (dampingRatio >= 1.0f) {
+            float angularFreq = (float) -Math.sqrt(stiffness / mass);
+            float leftover = -angularFreq * delta - velocity;
+            return to - (delta + dt * leftover) * (float) Math.exp(dt * angularFreq);
+        }
+        float dampingFreq = (float) Math.sqrt(4f * mass * stiffness - damping * damping);
+        float leftover = (damping * delta - 2f * mass * velocity) / dampingFreq;
+        float dfm = (0.5f * dampingFreq) / mass;
+        float dm = -(0.5f * damping) / mass;
+        return to - ((float) Math.cos(dt * dfm) * delta + (float) Math.sin(dt * dfm) * leftover) * (float) Math.exp(dt * dm);
+    }
+
+    static float getSpringVelocity(float from, float velocity, float to, float mass, float stiffness, float damping, float dt) {
+        float p1 = solveSpring(from, velocity, to, mass, stiffness, damping, dt);
+        float p2 = solveSpring(from, velocity, to, mass, stiffness, damping, dt + 0.001f);
+        return (p2 - p1) / 0.001f;
+    }
 }

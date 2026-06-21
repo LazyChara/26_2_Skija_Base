@@ -37,7 +37,7 @@ import java.time.Duration;
 public class MusicLoader {
 
     private static final Path MUSIC_DIR = FabricLoader.getInstance().getGameDir().resolve("lazychara/music");
-    private static final Path AMLL_LIBRARY_DIR = Path.of("D:\\26_2_Skija_Base\\amll-player");
+    private static final Path LYRICS_DIR = FabricLoader.getInstance().getGameDir().resolve("lazychara/lyrics");
     private static final List<MusicTrack> tracks = new ArrayList<>();
 
     private static Thread playbackThread;
@@ -62,6 +62,17 @@ public class MusicLoader {
         java.util.logging.Logger.getLogger("org.jaudiotagger.audio").setLevel(Level.SEVERE);
         java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac").setLevel(Level.SEVERE);
         java.util.logging.Logger.getLogger("org.jaudiotagger.audio.flac.FlacInfoReader").setLevel(Level.SEVERE);
+    }
+
+    private static volatile float currentAudioAmplitude = 0f;
+    private static volatile float currentAudioLowFreqLevel = 0f;
+
+    public static float getCurrentAudioAmplitude() {
+        return currentAudioAmplitude;
+    }
+
+    public static float getCurrentAudioLowFreqLevel() {
+        return currentAudioLowFreqLevel;
     }
 
     public static void init() {
@@ -258,7 +269,7 @@ public class MusicLoader {
     }
 
     private static boolean cacheLocalAMLLyrics(MusicTrack track, Path jsonPath) {
-        if (!Files.isDirectory(AMLL_LIBRARY_DIR)) return false;
+        if (!Files.isDirectory(LYRICS_DIR)) return false;
         try {
             Files.createDirectories(MUSIC_DIR);
             Path match = findLocalAMLLyrics(track);
@@ -277,7 +288,7 @@ public class MusicLoader {
         String targetArtist = normalizeLyricSearchText(track.artist());
         if (targetTitle.isEmpty()) return null;
 
-        try (Stream<Path> stream = Files.walk(AMLL_LIBRARY_DIR)) {
+        try (Stream<Path> stream = Files.walk(LYRICS_DIR)) {
             return stream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase().endsWith(".json"))
@@ -286,7 +297,7 @@ public class MusicLoader {
                     .findFirst()
                     .orElse(null);
         } catch (Exception e) {
-            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to search local AMLL lyrics directory {}", AMLL_LIBRARY_DIR, e);
+            SkijaTestClient.LOGGER.info("[MusicLoader] Failed to search local AMLL lyrics directory {}", LYRICS_DIR, e);
             return null;
         }
     }
@@ -359,6 +370,8 @@ public class MusicLoader {
         playbackEnded = false;
         stopRequested = false;
         currentMicros = Math.max(0L, (long) (startSeconds * 1_000_000L));
+        currentAudioAmplitude = 0f;
+        currentAudioLowFreqLevel = 0f;
         playbackThread = new Thread(() -> playbackLoop(track, Math.max(0f, startSeconds), serial), "SkijaTest-MusicLoader-Playback");
         playbackThread.setDaemon(true);
         playbackThread.start();
@@ -401,6 +414,8 @@ public class MusicLoader {
         stopRequested = true;
         playbackSerial++;
         paused = true;
+        currentAudioAmplitude = 0f;
+        currentAudioLowFreqLevel = 0f;
         if (currentLine != null) {
             try { currentLine.stop(); } catch (Exception ignored) {}
             try { currentLine.close(); } catch (Exception ignored) {}
@@ -474,10 +489,12 @@ public class MusicLoader {
                 if (usable <= 0) continue;
                 applyPlaybackVolume(line);
                 if (direct) {
+                    updateAudioLevels(inputBuffer, usable, channels, sampleRate);
                     line.write(inputBuffer, 0, usable);
                     framesWritten += usable / sourceFrameSize;
                 } else {
                     byte[] out = convertToSigned16LittleEndian(inputBuffer, usable, sourceFormat, sourceFrameSize);
+                    updateAudioLevels(out, out.length, channels, sampleRate);
                     line.write(out, 0, out.length);
                     framesWritten += out.length / outputFormat.getFrameSize();
                 }
@@ -508,6 +525,66 @@ public class MusicLoader {
                 playbackEnded = completed;
             }
         }
+    }
+
+    private static float computeRms(byte[] buffer, int length) {
+        if (length <= 0) return 0f;
+        long sum = 0;
+        int sampleCount = length / 2;
+        for (int i = 0; i < length - 1; i += 2) {
+            short sample = (short) ((buffer[i] & 0xFF) | (buffer[i + 1] << 8));
+            sum += (long) sample * sample;
+        }
+        float rms = sampleCount > 0 ? (float) Math.sqrt(sum / (float) sampleCount) : 0f;
+        return Math.min(1f, rms / 32768f);
+    }
+
+    private static void updateAudioLevels(byte[] pcm, int length, int channels, float sampleRate) {
+        currentAudioAmplitude = computeRms(pcm, length);
+        currentAudioLowFreqLevel = computeAMLLLowFreqLevel(pcm, length, channels, sampleRate);
+    }
+
+    private static float computeAMLLLowFreqLevel(byte[] pcm, int length, int channels, float sampleRate) {
+        if (pcm == null || length <= 0 || channels <= 0 || sampleRate <= 0f) return 0f;
+        float first = computeLowFreqBucket(pcm, length, channels, sampleRate, 45f, 65f, 85f);
+        float second = computeLowFreqBucket(pcm, length, channels, sampleRate, 100f, 140f, 180f);
+        return (amllAmplitudeToLevel(first) + amllAmplitudeToLevel(second)) * 0.5f;
+    }
+
+    private static float computeLowFreqBucket(byte[] pcm, int length, int channels, float sampleRate, float f0, float f1, float f2) {
+        return Math.max(computeGoertzelByte(pcm, length, channels, sampleRate, f0), Math.max(computeGoertzelByte(pcm, length, channels, sampleRate, f1), computeGoertzelByte(pcm, length, channels, sampleRate, f2)));
+    }
+
+    private static float computeGoertzelByte(byte[] pcm, int length, int channels, float sampleRate, float frequency) {
+        int frameSize = Math.max(1, channels) * 2;
+        int frames = length / frameSize;
+        if (frames <= 0) return 0f;
+        double omega = 2.0 * Math.PI * frequency / sampleRate;
+        double coeff = 2.0 * Math.cos(omega);
+        double q1 = 0.0;
+        double q2 = 0.0;
+        for (int frame = 0; frame < frames; frame++) {
+            int frameOffset = frame * frameSize;
+            double sample = 0.0;
+            for (int ch = 0; ch < channels; ch++) {
+                int pos = frameOffset + ch * 2;
+                if (pos + 1 >= length) break;
+                short value = (short) ((pcm[pos] & 0xFF) | (pcm[pos + 1] << 8));
+                sample += value / 32768.0;
+            }
+            sample /= Math.max(1, channels);
+            double q0 = coeff * q1 - q2 + sample;
+            q2 = q1;
+            q1 = q0;
+        }
+        double power = Math.max(0.0, q1 * q1 + q2 * q2 - coeff * q1 * q2);
+        double amplitude = 2.0 * Math.sqrt(power) / frames;
+        return (float) Math.min(255.0, Math.max(0.0, amplitude * 255.0));
+    }
+
+    private static float amllAmplitudeToLevel(float amplitude) {
+        float normalized = Math.max(0f, Math.min(1f, amplitude / 255f));
+        return 0.5f * (float) Math.log10(normalized + 1f);
     }
 
     private static boolean isPcmFormat(AudioFormat format) {
@@ -615,6 +692,7 @@ public class MusicLoader {
                 if (isPlaybackCancelled(serial)) break;
                 applyPlaybackVolume(line);
                 byte[] pcm = shortsToLittleEndian(output.getBuffer(), output.getBufferLength());
+                updateAudioLevels(pcm, pcm.length, output.getChannelCount(), output.getSampleFrequency());
                 line.write(pcm, 0, pcm.length);
                 playedMicros += (long) (header.ms_per_frame() * 1000.0);
                 currentMicros = startMicros + playedMicros;

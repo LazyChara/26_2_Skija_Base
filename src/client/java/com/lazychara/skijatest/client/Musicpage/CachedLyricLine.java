@@ -23,6 +23,9 @@ final class CachedLyricLine implements AutoCloseable {
     final float hoverH;
     final float hoverPad;
     List<WordRange> dynamicWordRanges = List.of();
+    final AMLLSpring ySpring = new AMLLSpring(0f);
+    final AMLLSpring scaleSpring = new AMLLSpring(1f);
+    float lastDelayedTargetY = Float.NaN;
     float currentY;
     float velocityY;
     float currentScale = 1f;
@@ -31,12 +34,6 @@ final class CachedLyricLine implements AutoCloseable {
     float velocityOpacity;
     float currentBlurVisual;
     float velocityBlur;
-    Image bakedBlurImage;
-    SkijaRenderer bakedBlurRenderer;
-    float bakedBlurW;
-    float bakedBlurH;
-    float bakedBlurPad;
-    int bakedBlurStep = -1;
     float currentBrightAlpha = 1f;
     float currentDarkAlpha = 0.2f;
     float targetBrightAlpha = 1f;
@@ -65,31 +62,14 @@ final class CachedLyricLine implements AutoCloseable {
         this.dynamicWordRanges = ranges == null ? List.of() : ranges;
     }
 
-    void clearBakedBlur() {
-        if (bakedBlurImage != null) {
-            bakedBlurImage.close();
-            bakedBlurImage = null;
-        }
-        if (bakedBlurRenderer != null) {
-            bakedBlurRenderer.close();
-            bakedBlurRenderer = null;
-        }
-        bakedBlurW = 0f;
-        bakedBlurH = 0f;
-        bakedBlurPad = 0f;
-        bakedBlurStep = -1;
-    }
-
     @Override
     public void close() {
         if (whiteImage != null) whiteImage.close();
         if (activeImage != null) activeImage.close();
         if (inactiveImage != null) inactiveImage.close();
         if (hoverImage != null) hoverImage.close();
-        if (bakedBlurImage != null) bakedBlurImage.close();
         if (activeRenderer != null) activeRenderer.close();
         if (inactiveRenderer != null) inactiveRenderer.close();
         if (hoverRenderer != null) hoverRenderer.close();
-        if (bakedBlurRenderer != null) bakedBlurRenderer.close();
     }
 }
