@@ -9,6 +9,11 @@ final class MusicPageMath {
         return 1f - u * u * u;
     }
 
+    static float easeInCubic(float t) {
+        t = clamp(t, 0f, 1f);
+        return t * t * t;
+    }
+
     static float easeInOut(float t) {
         t = clamp(t, 0f, 1f);
         return t < 0.5f ? 2f * t * t : 1f - (float) Math.pow(-2f * t + 2f, 2f) * 0.5f;

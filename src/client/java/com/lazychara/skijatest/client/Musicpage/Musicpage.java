@@ -118,6 +118,9 @@ public class Musicpage extends Screen {
     private final Set<Integer> amllBufferedGroups = new HashSet<>();
     private int amllScrollToIndex = 0;
     private float amllLastTimelineSeconds = -1f;
+    private float smoothElapsedSeconds = 0f;
+    private float lastMusicLoaderSeconds = -1f;
+    private long lastMusicLoaderTime = 0;
     private int lastRenderedSecond = -1;
     private boolean dirty = true;
     private boolean controlsLayerDirty = true;
@@ -822,7 +825,7 @@ public class Musicpage extends Screen {
     private void renderLyrics(float x, float y, float w, float h, Typeface tf, int active, float scrollBase, float s) {
         float activePreferred = amllLyricFontSize();
         float inactivePreferred = amllInactiveLyricFontSize(activePreferred);
-        ensureLyricCache(tf, w, activePreferred, inactivePreferred, s);
+        ensureLyricCache(tf, w, activePreferred, inactivePreferred);
 
         Canvas c = renderer.canvas();
         c.save();
@@ -904,12 +907,11 @@ public class Musicpage extends Screen {
         return mainH + (groupActive ? bgH : 0f);
     }
 
-    private boolean ensureLyricCache(Typeface tf, float maxWidth, float activePreferred, float inactivePreferred, float s) {
+    private boolean ensureLyricCache(Typeface tf, float maxWidth, float activePreferred, float inactivePreferred) {
         if (tf == null) return false;
-        if (lyricCache.size() == lyricLines.size() && Math.abs(lyricCacheWidth - maxWidth) < 0.5f && Math.abs(lyricCacheScale - s) < 0.001f && Math.abs(lyricCacheActiveSize - activePreferred) < 0.001f && Math.abs(lyricCacheInactiveSize - inactivePreferred) < 0.001f && lyricCacheTypeface == tf) return false;
+        if (lyricCache.size() == lyricLines.size() && Math.abs(lyricCacheWidth - maxWidth) < 0.5f && Math.abs(lyricCacheActiveSize - activePreferred) < 0.001f && Math.abs(lyricCacheInactiveSize - inactivePreferred) < 0.001f && lyricCacheTypeface == tf) return false;
         clearLyricCache();
         lyricCacheWidth = maxWidth;
-        lyricCacheScale = s;
         lyricCacheActiveSize = activePreferred;
         lyricCacheInactiveSize = inactivePreferred;
         lyricCacheTypeface = tf;
@@ -1080,7 +1082,14 @@ public class Musicpage extends Screen {
     private String effectiveRomanText(LyricLine line) {
         if (line == null) return "";
         if (line.romanization() != null && !line.romanization().isBlank()) return line.romanization();
-        return "";
+        if (line.words() == null || line.words().isEmpty()) return "";
+        StringBuilder roman = new StringBuilder();
+        for (LyricWord word : line.words()) {
+            if (word.romanWord() == null || word.romanWord().isBlank()) continue;
+            if (!roman.isEmpty()) roman.append(' ');
+            roman.append(word.romanWord().trim());
+        }
+        return roman.toString();
     }
 
 
@@ -1260,7 +1269,7 @@ public class Musicpage extends Screen {
         if (tf != null && layoutRightW > 1f) {
             float activePreferred = amllLyricFontSize();
             float inactivePreferred = amllInactiveLyricFontSize(activePreferred);
-            if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
+            if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred)) {
                 lyricSnapOnNextRender = true;
                 if (!useLineLyricTextures()) lyricsLayerDirty = true;
             }
@@ -2816,7 +2825,15 @@ public class Musicpage extends Screen {
 
     private float elapsedSeconds(MusicLoader.MusicTrack track, long now) {
         if (MusicLoader.getCurrentTrack() == track) {
-            return MusicLoader.getCurrentSeconds();
+            float current = MusicLoader.getCurrentSeconds();
+            if (current != lastMusicLoaderSeconds) {
+                lastMusicLoaderSeconds = current;
+                lastMusicLoaderTime = now;
+                smoothElapsedSeconds = current;
+            } else if (MusicLoader.isPlaying(track)) {
+                smoothElapsedSeconds = lastMusicLoaderSeconds + (now - lastMusicLoaderTime) / 1000f;
+            }
+            return smoothElapsedSeconds;
         }
         return 0f;
     }
@@ -2912,75 +2929,153 @@ public class Musicpage extends Screen {
 
 
 
-    private void blitDynamicLyricLine(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH, float currentSeconds) {
-        float darkAlpha = clamp(alpha * line.currentDarkAlpha, 0f, 1f);
-        if (darkAlpha > 0.01f) blitRendererClippedAlpha(g, line.activeRenderer, drawX, drawY, drawW, drawH, darkAlpha, clipX, clipY, clipW, clipH);
-        if (line.whiteRenderer == null || line.dynamicWordRanges == null || line.dynamicWordRanges.isEmpty()) return;
-        float brightAlpha = clamp(alpha * line.currentBrightAlpha, 0f, 1f);
-        if (brightAlpha <= 0.01f) return;
+    private void blitDynamicLyricLine(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH, float currentSeconds, boolean isActive) {
+        float darkAlpha = MusicPageMath.clamp(alpha * line.currentDarkAlpha, 0f, 1f);
+        float brightAlpha = MusicPageMath.clamp(alpha * line.currentBrightAlpha, 0f, 1f);
+
+        float subLineSrcY = -1f;
+        if (line.dynamicWordRanges != null && !line.dynamicWordRanges.isEmpty()) {
+            for (WordRange r : line.dynamicWordRanges) {
+                subLineSrcY = Math.max(subLineSrcY, r.y() + r.h());
+            }
+        }
+        if (subLineSrcY >= 0f && darkAlpha > 0.01f) {
+            float srcY = line.activePad + subLineSrcY;
+            if (srcY < line.activeH) {
+                float srcH = line.activeH - srcY;
+                blitRendererSegmentClippedAlpha(g, line.activeRenderer, drawX, drawY, drawW, drawH, line.activeW, line.activeH, 0f, srcY, line.activeW, srcH, darkAlpha, clipX, clipY, clipW, clipH);
+            }
+        }
+
+        if (line.dynamicWordRanges == null || line.dynamicWordRanges.isEmpty()) return;
+        float timeFromStart = currentSeconds - line.lineRef.startTime();
+        boolean isBG = line.lineRef.isBG();
+
         for (WordRange range : line.dynamicWordRanges) {
-            if (currentSeconds < range.startTime()) continue;
-            if (currentSeconds >= range.endTime()) {
-                blitDynamicWordFully(g, line, range, drawX, drawY, drawW, drawH, brightAlpha, clipX, clipY, clipW, clipH);
-            } else {
-                blitDynamicWordProgress(g, line, range, drawX, drawY, drawW, drawH, brightAlpha, clipX, clipY, clipW, clipH, currentSeconds);
+            float wordStart = range.startTime() - line.lineRef.startTime();
+            float wordDuration = Math.max(1f, range.endTime() - range.startTime()) * 1000f;
+            float delay = wordStart * 1000f;
+            float relativeTimeMs = timeFromStart * 1000f;
+
+            float t = MusicPageMath.clamp((relativeTimeMs - delay) / wordDuration, 0f, 1f);
+            float offsetX = 0f;
+            float offsetY = 0f;
+            float scaleMult = 1f;
+            float glowAlpha = 0f;
+
+            if (relativeTimeMs >= delay) {
+                float up = isBG ? 0.10f : 0.05f;
+                float em = Math.max(range.baseH(), range.h());
+                offsetY = -up * em * MusicPageMath.easeOutCubic(t);
+            }
+
+            if (range.emphasize()) {
+                float du = wordDuration;
+                float amount = du / 2000f;
+                amount = amount > 1f ? (float) Math.sqrt(amount) : amount * amount * amount;
+                float blur = du / 3000f;
+                blur = blur > 1f ? (float) Math.sqrt(blur) : blur * blur * blur;
+                amount *= 0.6f;
+                blur *= 0.5f;
+                if (range.wordIndex() == range.wordCount() - 1) {
+                    amount *= 1.6f;
+                    blur *= 1.5f;
+                    du *= 1.2f;
+                }
+                amount = Math.min(1.2f, amount);
+                blur = Math.min(0.8f, blur);
+
+                float empT = MusicPageMath.clamp((relativeTimeMs - delay) / du, 0f, 1f);
+                float transX = empT < 0.5f ? MusicPageMath.easeInCubic(empT / 0.5f) : 1f - MusicPageMath.easeOutCubic((empT - 0.5f) / 0.5f);
+                glowAlpha = transX * blur;
+                scaleMult = 1f + transX * 0.1f * amount;
+                float em = Math.max(range.baseH(), range.h());
+                offsetX = -transX * 0.03f * amount * 0.5f * em;
+                offsetY += -transX * 0.025f * amount * em;
+
+                float charFloatStart = delay - 400f;
+                float charFloatDuration = du * 1.4f;
+                float charFloatT = MusicPageMath.clamp((relativeTimeMs - charFloatStart) / charFloatDuration, 0f, 1f);
+                float charFloatY = (float) Math.sin(charFloatT * Math.PI);
+                if (isBG) charFloatY *= 2f;
+                offsetY += -charFloatY * 0.05f * em;
+            }
+
+            if (darkAlpha > 0.01f) {
+                blitWordLayer(g, line.activeRenderer, line, range, drawX, drawY, drawW, drawH, darkAlpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
+            }
+
+            if (isActive && line.whiteRenderer != null && brightAlpha > 0.01f && currentSeconds >= range.startTime()) {
+                if (glowAlpha > 0.01f) {
+                    blitWordLayer(g, line.whiteRenderer, line, range, drawX, drawY, drawW, drawH, brightAlpha * glowAlpha * 0.5f, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult + 0.02f);
+                }
+                if (currentSeconds >= range.endTime()) {
+                    blitWordLayer(g, line.whiteRenderer, line, range, drawX, drawY, drawW, drawH, brightAlpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
+                } else {
+                    blitDynamicWordProgress(g, line, range, drawX, drawY, drawW, drawH, brightAlpha, clipX, clipY, clipW, clipH, currentSeconds, offsetX, offsetY, scaleMult);
+                }
             }
         }
     }
 
-    private void blitDynamicWordFully(GuiGraphicsExtractor g, CachedLyricLine line, WordRange range, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH) {
+    private void blitWordLayer(GuiGraphicsExtractor g, SkijaRenderer renderer, CachedLyricLine line, WordRange range, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH, float offsetX, float offsetY, float scaleMult) {
         float pad = line.activePad;
         float wordW = Math.max(0f, range.endX() - range.startX());
-        if (wordW > 0.5f && range.h() > 0.5f) blitDynamicWordSegment(g, line, drawX, drawY, drawW, drawH, pad + range.startX(), pad + range.y(), wordW, range.h(), alpha, clipX, clipY, clipW, clipH);
+        if (wordW > 0.5f && range.h() > 0.5f) {
+            blitDynamicWordSegment(g, renderer, line, drawX, drawY, drawW, drawH, pad + range.startX(), pad + range.y(), wordW, range.h(), alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
+        }
         float romanW = Math.max(0f, range.romanWordEndX() - range.romanWordStartX());
-        if (romanW > 0.5f && range.romanWordH() > 0.5f) blitDynamicWordSegment(g, line, drawX, drawY, drawW, drawH, pad + range.romanWordStartX(), pad + range.romanWordY(), romanW, range.romanWordH(), alpha, clipX, clipY, clipW, clipH);
+        if (romanW > 0.5f && range.romanWordH() > 0.5f) {
+            blitDynamicWordSegment(g, renderer, line, drawX, drawY, drawW, drawH, pad + range.romanWordStartX(), pad + range.romanWordY(), romanW, range.romanWordH(), alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
+        }
     }
 
-    private void blitDynamicWordProgress(GuiGraphicsExtractor g, CachedLyricLine line, WordRange range, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH, float currentSeconds) {
+    private void blitDynamicWordProgress(GuiGraphicsExtractor g, CachedLyricLine line, WordRange range, float drawX, float drawY, float drawW, float drawH, float alpha, float clipX, float clipY, float clipW, float clipH, float currentSeconds, float offsetX, float offsetY, float scaleMult) {
         float pad = line.activePad;
         float fade = amllDynamicWordFadeWidth(range);
         float wordW = Math.max(0f, range.endX() - range.startX());
         if (wordW > 0.5f && range.h() > 0.5f) {
-            float progressW = clamp(amllRangeProgressWidth(range, currentSeconds, 0f, false), 0f, wordW);
-            blitDynamicProgressSegment(g, line, drawX, drawY, drawW, drawH, pad + range.startX(), pad + range.y(), wordW, range.h(), progressW, fade, alpha, clipX, clipY, clipW, clipH);
+            float progressW = MusicPageMath.clamp(amllRangeProgressWidth(range, currentSeconds, false), 0f, wordW);
+            blitDynamicProgressSegment(g, line, drawX, drawY, drawW, drawH, pad + range.startX(), pad + range.y(), wordW, range.h(), progressW, fade, alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
         }
         float romanW = Math.max(0f, range.romanWordEndX() - range.romanWordStartX());
         if (romanW > 0.5f && range.romanWordH() > 0.5f) {
-            float romanProgressW = clamp(amllRangeProgressWidth(range, currentSeconds, 0f, true), 0f, romanW);
-            blitDynamicProgressSegment(g, line, drawX, drawY, drawW, drawH, pad + range.romanWordStartX(), pad + range.romanWordY(), romanW, range.romanWordH(), romanProgressW, fade, alpha, clipX, clipY, clipW, clipH);
+            float romanProgressW = MusicPageMath.clamp(amllRangeProgressWidth(range, currentSeconds, true), 0f, romanW);
+            blitDynamicProgressSegment(g, line, drawX, drawY, drawW, drawH, pad + range.romanWordStartX(), pad + range.romanWordY(), romanW, range.romanWordH(), romanProgressW, fade, alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
         }
     }
 
-    private void blitDynamicProgressSegment(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcX, float srcY, float srcW, float srcH, float progressW, float fadeW, float alpha, float clipX, float clipY, float clipW, float clipH) {
-        if (progressW <= 0.01f || srcW <= 0.5f || srcH <= 0.5f) return;
-        float progress = clamp(progressW, 0f, srcW);
+    private void blitDynamicProgressSegment(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcX, float srcY, float srcW, float srcH, float progressW, float fadeW, float alpha, float clipX, float clipY, float clipW, float clipH, float offsetX, float offsetY, float scaleMult) {
+        if (srcW <= 0.5f || srcH <= 0.5f) return;
+        float ratio = MusicPageMath.clamp(progressW / srcW, 0f, 1f);
+        if (ratio <= 0.001f) return;
         float transition = Math.min(Math.max(0f, fadeW), srcW);
         if (transition <= 0.01f) {
-            blitDynamicWordSegment(g, line, drawX, drawY, drawW, drawH, srcX, srcY, progress, srcH, alpha, clipX, clipY, clipW, clipH);
+            blitDynamicWordSegment(g, line.whiteRenderer, line, drawX, drawY, drawW, drawH, srcX, srcY, progressW, srcH, alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
             return;
         }
         float start = srcX;
         float end = srcX + srcW;
-        float edge = srcX + progress;
-        float solidEnd = clamp(edge - transition * 0.5f, start, end);
-        if (solidEnd > start + 0.5f) blitDynamicWordSegment(g, line, drawX, drawY, drawW, drawH, start, srcY, solidEnd - start, srcH, alpha, clipX, clipY, clipW, clipH);
+        float edge = srcX - transition * 0.5f + ratio * (srcW + transition);
+        float solidEnd = MusicPageMath.clamp(edge - transition * 0.5f, start, end);
+        if (solidEnd > start + 0.5f) blitDynamicWordSegment(g, line.whiteRenderer, line, drawX, drawY, drawW, drawH, start, srcY, solidEnd - start, srcH, alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
         float gradStart = Math.max(start, solidEnd);
         float gradEnd = Math.min(end, edge + transition * 0.5f);
-        if (gradEnd > gradStart + 0.5f) blitDynamicGradientSegment(g, line, drawX, drawY, drawW, drawH, gradStart, gradEnd, srcY, srcH, edge, transition, alpha, clipX, clipY, clipW, clipH);
+        if (gradEnd > gradStart + 0.5f) blitDynamicGradientSegment(g, line.whiteRenderer, line, drawX, drawY, drawW, drawH, gradStart, gradEnd, srcY, srcH, edge, transition, alpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
     }
 
-    private void blitDynamicGradientSegment(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcStart, float srcEnd, float srcY, float srcH, float edge, float transition, float alpha, float clipX, float clipY, float clipW, float clipH) {
+    private void blitDynamicGradientSegment(GuiGraphicsExtractor g, SkijaRenderer renderer, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcStart, float srcEnd, float srcY, float srcH, float edge, float transition, float alpha, float clipX, float clipY, float clipW, float clipH, float offsetX, float offsetY, float scaleMult) {
         float width = srcEnd - srcStart;
-        int steps = Math.max(3, Math.min(12, Math.round(width / Math.max(1f, transition / 4f))));
+        int steps = 12;
         float fadeStart = edge - transition * 0.5f;
         for (int i = 0; i < steps; i++) {
             float x0 = srcStart + width * (i / (float) steps);
             float x1 = srcStart + width * ((i + 1f) / steps);
             float mid = (x0 + x1) * 0.5f;
-            float t = clamp((mid - fadeStart) / Math.max(0.001f, transition), 0f, 1f);
+            float t = MusicPageMath.clamp((mid - fadeStart) / Math.max(0.001f, transition), 0f, 1f);
             float segmentAlpha = alpha * (1f - t);
             if (segmentAlpha <= 0.01f) continue;
-            blitDynamicWordSegment(g, line, drawX, drawY, drawW, drawH, x0, srcY, x1 - x0, srcH, segmentAlpha, clipX, clipY, clipW, clipH);
+            blitDynamicWordSegment(g, renderer, line, drawX, drawY, drawW, drawH, x0, srcY, x1 - x0, srcH, segmentAlpha, clipX, clipY, clipW, clipH, offsetX, offsetY, scaleMult);
         }
     }
 
@@ -2989,35 +3084,53 @@ public class Musicpage extends Screen {
         return Math.max(0f, em * AMLL_WORD_FADE_WIDTH);
     }
 
-    private void blitDynamicWordSegment(GuiGraphicsExtractor g, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcX, float srcY, float srcW, float srcH, float alpha, float clipX, float clipY, float clipW, float clipH) {
-        blitRendererSegmentClippedAlpha(g, line.whiteRenderer, drawX, drawY, drawW, drawH, line.activeW, line.activeH, srcX, srcY, srcW, srcH, alpha, clipX, clipY, clipW, clipH);
+    private void blitDynamicWordSegment(GuiGraphicsExtractor g, SkijaRenderer renderer, CachedLyricLine line, float drawX, float drawY, float drawW, float drawH, float srcX, float srcY, float srcW, float srcH, float alpha, float clipX, float clipY, float clipW, float clipH, float offsetX, float offsetY, float scaleMult) {
+        float scaleX = drawW / line.activeW;
+        float scaleY = drawH / line.activeH;
+        float cx = drawX + srcX * scaleX + (srcW * scaleX) * 0.5f;
+        float cy = drawY + srcY * scaleY + (srcH * scaleY) * 0.5f;
+        float dstW = srcW * scaleX * scaleMult;
+        float dstH = srcH * scaleY * scaleMult;
+        float dstX = cx - dstW * 0.5f + offsetX * scaleX;
+        float dstY = cy - dstH * 0.5f + offsetY * scaleY;
+
+        float left = Math.max(dstX, clipX);
+        float top = Math.max(dstY, clipY);
+        float right = Math.min(dstX + dstW, clipX + clipW);
+        float bottom = Math.min(dstY + dstH, clipY + clipH);
+        if (right <= left + 0.5f || bottom <= top + 0.5f) return;
+
+        float u0 = (srcX + (left - dstX) * (srcW / dstW)) / line.activeW;
+        float v0 = (srcY + (top - dstY) * (srcH / dstH)) / line.activeH;
+        float u1 = (srcX + (right - dstX) * (srcW / dstW)) / line.activeW;
+        float v1 = (srcY + (bottom - dstY) * (srcH / dstH)) / line.activeH;
+
+        blitRendererAlpha(g, renderer, left, top, right - left, bottom - top, u0, v0, u1, v1, alpha);
     }
 
 
-    private float amllRangeProgressWidth(WordRange range, float currentSeconds, float fadeWidth, boolean roman) {
+    private float amllRangeProgressWidth(WordRange range, float currentSeconds, boolean roman) {
         float wordWidth = roman ? Math.max(0f, range.romanWordEndX() - range.romanWordStartX()) : Math.max(0f, range.endX() - range.startX());
         if (wordWidth <= 0f) return 0f;
-        if (!roman && range.ruby() != null && !range.ruby().isEmpty()) return amllRubySegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
-        return amllSingleSegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
+        if (!roman && range.ruby() != null && !range.ruby().isEmpty()) return amllRubySegmentProgressWidth(range, currentSeconds, wordWidth);
+        return amllSingleSegmentProgressWidth(range, currentSeconds, wordWidth);
     }
 
-    private float amllSingleSegmentProgressWidth(WordRange range, float currentSeconds, float fadeWidth, float wordWidth) {
+    private float amllSingleSegmentProgressWidth(WordRange range, float currentSeconds, float wordWidth) {
         float duration = clampPositive(range.endTime() - range.startTime());
-        if (duration <= 0f) return currentSeconds >= range.endTime() ? amllApplyEdgeFade(range, wordWidth, fadeWidth, 1f, true, true) : 0f;
+        if (duration <= 0f) return currentSeconds >= range.endTime() ? wordWidth : 0f;
         float progress = clamp((currentSeconds - range.startTime()) / duration, 0f, 1f);
-        float width = wordWidth * progress;
-        return amllApplyEdgeFade(range, width, fadeWidth, progress, progress > 0f, progress >= 1f);
+        return wordWidth * progress;
     }
 
-    private float amllRubySegmentProgressWidth(WordRange range, float currentSeconds, float fadeWidth, float wordWidth) {
+    private float amllRubySegmentProgressWidth(WordRange range, float currentSeconds, float wordWidth) {
         int rubyCharCount = 0;
         for (RubyText ruby : range.ruby()) {
             if (ruby.text() != null) rubyCharCount += Math.max(0, ruby.text().length());
         }
-        if (rubyCharCount <= 0) return amllSingleSegmentProgressWidth(range, currentSeconds, fadeWidth, wordWidth);
+        if (rubyCharCount <= 0) return amllSingleSegmentProgressWidth(range, currentSeconds, wordWidth);
         float widthPerChar = wordWidth / rubyCharCount;
         float width = 0f;
-        int charIndex = 0;
         float lastTimeStamp = range.startTime();
         for (RubyText ruby : range.ruby()) {
             String text = ruby.text() == null ? "" : ruby.text();
@@ -3031,11 +3144,7 @@ public class Musicpage extends Screen {
             lastTimeStamp = rubyStart;
             float rubyDuration = clampPositive(rubyEnd - rubyStart);
             if (rubyDuration <= 0f) {
-                for (int i = 0; i < charCount; i++) {
-                    width += widthPerChar;
-                    width = amllApplyEdgeFade(range, width, fadeWidth, 1f, charIndex == 0, charIndex == rubyCharCount - 1);
-                    charIndex++;
-                }
+                width += widthPerChar * charCount;
                 lastTimeStamp = rubyEnd;
                 continue;
             }
@@ -3045,30 +3154,20 @@ public class Musicpage extends Screen {
                 float charEnd = charStart + perCharDuration;
                 if (currentSeconds >= charEnd) {
                     width += widthPerChar;
-                    width = amllApplyEdgeFade(range, width, fadeWidth, 1f, charIndex == 0, charIndex == rubyCharCount - 1);
                 } else if (currentSeconds > charStart) {
                     float p = clamp((currentSeconds - charStart) / Math.max(0.001f, perCharDuration), 0f, 1f);
                     width += widthPerChar * p;
-                    width = amllApplyEdgeFade(range, width, fadeWidth, p, charIndex == 0, charIndex == rubyCharCount - 1);
                     return width;
                 } else {
                     return width;
                 }
                 lastTimeStamp = charEnd;
-                charIndex++;
             }
             if (currentSeconds < rubyEnd) return width;
             lastTimeStamp = rubyEnd;
         }
         if (currentSeconds >= Math.max(range.endTime(), lastTimeStamp)) return width;
         return width;
-    }
-
-    private float amllApplyEdgeFade(WordRange range, float width, float fadeWidth, float progress, boolean firstSegment, boolean lastSegment) {
-        float result = width;
-        if (range.wordIndex() == 0 && firstSegment && progress > 0f) result += fadeWidth * 1.5f * clamp01(progress);
-        if (range.wordIndex() == range.wordCount() - 1 && lastSegment && progress >= 1f) result += fadeWidth * 0.5f;
-        return result;
     }
 
     private boolean blitLyricLines(GuiGraphicsExtractor g, float globalAlpha) {
@@ -3079,7 +3178,7 @@ public class Musicpage extends Screen {
         float activePreferred = amllLyricFontSize();
         float inactivePreferred = amllInactiveLyricFontSize(activePreferred);
         int active = lastActiveLyric >= 0 ? lastActiveLyric : activeLyricIndex(elapsedSeconds(currentUiTrack, System.currentTimeMillis()));
-        if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred, s)) {
+        if (ensureLyricCache(tf, layoutRightW, activePreferred, inactivePreferred)) {
             float currentSeconds = currentUiTrack == null ? 0f : displayedElapsedSeconds(currentUiTrack, System.currentTimeMillis());
             InterludeState interlude = computeInterlude(active, currentSeconds);
             updateLyricLineAnimations(active, currentSeconds, s, 0f, true, interlude, false);
@@ -3126,8 +3225,11 @@ public class Musicpage extends Screen {
             alpha *= amllLyricEdgeMaskAlpha(drawY, drawH, clipY, clipH);
             if (alpha <= 0.01f) continue;
             if (isActive && line.lineRef != null && line.lineRef.isDynamic() && line.whiteRenderer != null) {
-                blitDynamicLyricLine(g, line, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH, currentSecondsDyn);
+                blitDynamicLyricLine(g, line, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH, currentSecondsDyn, isActive);
                 continue;
+            }
+            if (line.lineRef != null && line.lineRef.isDynamic()) {
+                alpha *= line.currentDarkAlpha;
             }
             if (useBlur) {
                 blitRendererClippedAMLLBlur(g, lineRenderer, drawX, drawY, drawW, drawH, alpha, clipX, clipY, clipW, clipH, blurLevel);
