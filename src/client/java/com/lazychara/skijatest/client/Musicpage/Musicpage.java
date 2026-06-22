@@ -138,6 +138,7 @@ public class Musicpage extends Screen {
     private int trackIndex;
     private Image coverImage;
     private List<LyricLine> lyricLines = List.of();
+    private boolean amllNonDynamicLyrics = true;
     private final List<CachedLyricLine> lyricCache = new ArrayList<>();
     private final Map<String, Path> iconPathCache = new HashMap<>();
     private float lyricCacheWidth = -1f;
@@ -440,6 +441,7 @@ public class Musicpage extends Screen {
             if (track != cachedTrack) {
                 cachedTrack = track;
                 lyricLines = parseLyrics(track.lyrics(), track.title(), track.artist());
+                amllNonDynamicLyrics = isAMLLNonDynamicLyrics(lyricLines);
                 resetAMLLTimeline();
                 clearLyricCache();
                 lyricScroll = 0f;
@@ -914,11 +916,11 @@ public class Musicpage extends Screen {
         for (LyricLine line : lyricLines) {
             String text = line.text();
             float baseSize = line.isBG() ? activePreferred * 0.7f : activePreferred;
-            float activeSize = fitLyricTextSize(text, tf, baseSize, 12f, maxWidth);
+            float activeSize = LyricTextLayout.fitLyricTextSize(text, tf, baseSize, 12f, maxWidth, renderer, amllLyricTextMaxWidth(maxWidth, baseSize));
             float inactiveSize = activeSize;
-            TextImage active = createLyricTextImage(line, tf, activeSize, WHITE, 2.5f, true, maxWidth, false, 0f);
-            TextImage inactive = createLyricTextImage(line, tf, inactiveSize, WHITE, 2.5f, true, maxWidth, false, 0f);
-            TextImage hover = createLyricTextImage(line, tf, inactiveSize, WHITE, 2.5f, true, maxWidth, false, 0f);
+            TextImage active = createLyricTextImage(line, tf, activeSize, WHITE, 0f, false, maxWidth, false, 0f);
+            TextImage inactive = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
+            TextImage hover = createLyricTextImage(line, tf, inactiveSize, WHITE, 0f, false, maxWidth, false, 0f);
             CachedLyricLine cached = new CachedLyricLine(active, inactive, hover);
             cached.lineRef = line;
             if (line.isDynamic()) {
@@ -942,9 +944,9 @@ public class Musicpage extends Screen {
         float rubySize = size * 0.5f;
         float transSize = amllLyricSubLineFontSize(size);
         float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
-        String[] wrappedLines = wrapText(line.text(), tf, size, textMaxWidth);
-        String[] transLines = line.translation() == null || line.translation().isBlank() ? new String[0] : wrapText(line.translation(), tf, transSize, textMaxWidth);
-        String[] romanLines = romanText.isEmpty() ? new String[0] : wrapText(romanText, tf, transSize, textMaxWidth);
+        String[] wrappedLines = LyricTextLayout.wrapText(line.text(), tf, size, textMaxWidth, renderer);
+        String[] transLines = line.translation() == null || line.translation().isBlank() ? new String[0] : LyricTextLayout.wrapText(line.translation(), tf, transSize, textMaxWidth, renderer);
+        String[] romanLines = romanText.isEmpty() ? new String[0] : LyricTextLayout.wrapText(romanText, tf, transSize, textMaxWidth, renderer);
         float baseLineH;
         float rubyLineH;
         float subLineH;
@@ -969,27 +971,25 @@ public class Musicpage extends Screen {
             }
         }
         Map<Integer, RomanWordBox> romanWordBoxes = measureRomanWordBoxes(line, tf, transSize, linePadX, romanY, subLineH, textMaxWidth, maxLineW, romanLines);
-        int lineIndex = 0;
-        float x = linePadX;
-        float currentLineWidth = wrappedLines.length > 0 ? renderer.measureText(wrappedLines[0], tf, size) : 0f;
-        int wordIndex = 0;
+        java.util.List<LyricWordPlacement> placements = LyricTextLayout.measureLyricWordPlacements(line, tf, size, wrappedLines, linePadX, maxLineW, textMaxWidth, renderer);
         int wordCount = line.words().size();
-        for (LyricWord word : line.words()) {
-            String text = word.word() == null ? "" : word.word();
-            float wordW = Math.max(0f, renderer.measureText(text, tf, size));
-            if (lineIndex < wrappedLines.length && x > linePadX && x + wordW - linePadX > currentLineWidth + 0.5f) {
-                lineIndex++;
-                x = linePadX;
-                currentLineWidth = lineIndex < wrappedLines.length ? renderer.measureText(wrappedLines[lineIndex], tf, size) : textMaxWidth;
-            }
+        for (int wordIndex = 0; wordIndex < wordCount; wordIndex++) {
+            LyricWord word = line.words().get(wordIndex);
+            LyricWordPlacement placement = wordIndex < placements.size() ? placements.get(wordIndex) : null;
+            String rawText = word.word() == null ? "" : word.word();
+            String text = placement == null || placement.text().isEmpty() ? LyricTextLayout.normalizeLyricText(rawText) : placement.text();
+            int lineIndex = placement == null ? 0 : Math.max(0, Math.min(wrappedLines.length - 1, placement.lineIndex()));
+            float startX = placement == null ? LyricTextLayout.lyricLineTextStartX(line, linePadX, maxLineW, wrappedLines.length > 0 ? renderer.measureText(wrappedLines[0], tf, size) : textMaxWidth) : placement.startX();
+            float endX = placement == null ? startX + Math.max(0f, renderer.measureText(text, tf, size)) : placement.endX();
+            float wordW = Math.max(0f, endX - startX);
             float blockY = linePadY + mainBlockLineH * lineIndex;
             float rubyY = hasRuby ? blockY : -1f;
             float baseY = blockY + rubyLineH;
-            boolean emphasize = shouldAMLLWordEmphasize(text, word.endTime() - word.startTime());
+            boolean emphasize = shouldAMLLWordEmphasize(rawText, word.endTime() - word.startTime());
             RomanWordBox romanBox = nearestRomanWordBox(romanWordBoxes, wordIndex, wordCount);
-            java.util.List<EmphasisSlice> emphasisSlices = measureEmphasisSlices(text, tf, size, x, x + wordW);
+            java.util.List<EmphasisSlice> emphasisSlices = measureEmphasisSlices(text, tf, size, startX, endX);
             ranges.add(new WordRange(
-                    word.startTime(), word.endTime(), x, x + wordW,
+                    word.startTime(), word.endTime(), startX, endX,
                     blockY, mainBlockLineH, baseY, baseLineH, rubyY, rubyLineH,
                     romanY, romanH, linePadX, linePadX + romanW,
                     romanBox == null ? -1f : romanBox.startX(),
@@ -997,10 +997,8 @@ public class Musicpage extends Screen {
                     romanBox == null ? -1f : romanBox.y(),
                     romanBox == null ? 0f : romanBox.h(),
                     text, emphasisSlices,
-                    lineIndex, wordIndex, wordCount, emphasize,
+                    lineIndex, wordIndex, wordCount, emphasize && wordW > 0.5f,
                     word.ruby() == null ? List.of() : word.ruby()));
-            x += wordW;
-            wordIndex++;
         }
         return ranges;
     }
@@ -1082,14 +1080,7 @@ public class Musicpage extends Screen {
     private String effectiveRomanText(LyricLine line) {
         if (line == null) return "";
         if (line.romanization() != null && !line.romanization().isBlank()) return line.romanization();
-        if (line.words() == null || line.words().isEmpty()) return "";
-        StringBuilder roman = new StringBuilder();
-        for (LyricWord word : line.words()) {
-            if (word.romanWord() == null || word.romanWord().isBlank()) continue;
-            if (!roman.isEmpty()) roman.append(' ');
-            roman.append(word.romanWord().trim());
-        }
-        return roman.toString();
+        return "";
     }
 
 
@@ -1141,7 +1132,7 @@ public class Musicpage extends Screen {
 
     private boolean shouldAMLLWordEmphasize(String word, float durationSeconds) {
         if (word == null) return false;
-        if (containsCjk(word)) return durationSeconds >= 1f;
+        if (LyricTextLayout.containsCjk(word)) return durationSeconds >= 1f;
         int len = word.trim().length();
         return durationSeconds >= 1f && len <= 7 && len > 1;
     }
@@ -1154,11 +1145,11 @@ public class Musicpage extends Screen {
         float linePadX = amllLyricLinePaddingX(size);
         float linePadY = amllLyricLinePaddingY(size);
         float textMaxWidth = amllLyricTextMaxWidth(maxWidth, size);
-        String[] mainLines = wrapText(mainText, tf, size, textMaxWidth);
+        String[] mainLines = LyricTextLayout.wrapText(mainText, tf, size, textMaxWidth, renderer);
         float rubySize = size * 0.5f;
         float transSize = amllLyricSubLineFontSize(size);
-        String[] transLines = transText.isEmpty() ? new String[0] : wrapText(transText, tf, transSize, textMaxWidth);
-        String[] romanLines = romanText.isEmpty() ? new String[0] : wrapText(romanText, tf, transSize, textMaxWidth);
+        String[] transLines = transText.isEmpty() ? new String[0] : LyricTextLayout.wrapText(transText, tf, transSize, textMaxWidth, renderer);
+        String[] romanLines = romanText.isEmpty() ? new String[0] : LyricTextLayout.wrapText(romanText, tf, transSize, textMaxWidth, renderer);
         float scale = Math.max(1f, guiScale);
         try (Font font = new Font(tf, size * scale); Font rubyFont = new Font(tf, rubySize * scale)) {
             float lineH = Math.max(1f, (font.getMetrics().getDescent() - font.getMetrics().getAscent()) / scale * 1.20f);
@@ -1202,7 +1193,7 @@ public class Musicpage extends Screen {
                         sc.drawString(line, lineStartX, curY - logicalFont.getMetrics().getAscent(), logicalFont, paint);
                         curY += lineH;
                     }
-                    if (transLines.length > 0 || romanLines.length > 0) {
+                    if (!isWhiteMask && (transLines.length > 0 || romanLines.length > 0)) {
                         curY += linePadY * 0.5f;
                         int oldColor = paint.getColor();
                         paint.setColor(withAlpha(oldColor, alphaOf(oldColor) * amllLyricSubLineOpacity()));
@@ -1245,187 +1236,8 @@ public class Musicpage extends Screen {
             }
             sc.restore();
             textRenderer.upload();
-            Image image = textRenderer.getSurface().makeImageSnapshot();
-            return new TextImage(image, textRenderer, logicalW, logicalH, pad);
+            return new TextImage(textRenderer.getSurface().makeImageSnapshot(), textRenderer, logicalW, logicalH, pad);
         }
-    }
-
-
-
-    private String[] wrapText(String text, Typeface tf, float size, float maxWidth) {
-        String normalized = normalizeLyricText(text);
-        if (normalized.isEmpty()) return new String[]{""};
-        if (renderer.measureText(normalized, tf, size) <= maxWidth) return new String[]{normalized};
-        List<TextSegment> segments = lyricTextSegments(normalized, tf, size);
-        List<Integer> breaks = balancedLyricBreaks(segments, maxWidth);
-        if (breaks.isEmpty()) return new String[]{normalized};
-        Set<Integer> breakSet = new HashSet<>(breaks);
-        ArrayList<String> lines = new ArrayList<>();
-        StringBuilder cur = new StringBuilder();
-        for (int i = 0; i < segments.size(); i++) {
-            if (breakSet.contains(i) && !cur.isEmpty()) {
-                String line = trimLyricDrawLine(cur.toString());
-                if (!line.isEmpty()) lines.add(line);
-                cur.setLength(0);
-            }
-            cur.append(segments.get(i).text());
-        }
-        String last = trimLyricDrawLine(cur.toString());
-        if (!last.isEmpty()) lines.add(last);
-        return lines.isEmpty() ? new String[]{normalized} : lines.toArray(String[]::new);
-    }
-
-    private float fitLyricTextSize(String text, Typeface tf, float preferredSize, float minSize, float maxWidth) {
-        String normalized = normalizeLyricText(text);
-        float size = preferredSize;
-        while (size > minSize && longestLyricSegmentWidth(normalized, tf, size) > amllLyricTextMaxWidth(maxWidth, size)) {
-            size -= 1.4f;
-        }
-        return Math.max(minSize, size);
-    }
-
-    private float longestLyricSegmentWidth(String text, Typeface tf, float size) {
-        String normalized = normalizeLyricText(text);
-        if (normalized.isEmpty()) return 0f;
-        float result = 0f;
-        for (TextSegment segment : lyricTextSegments(normalized, tf, size)) {
-            if (!segment.isSpace()) result = Math.max(result, segment.width());
-        }
-        return result;
-    }
-
-    private String normalizeLyricText(String text) {
-        if (text == null) return "";
-        return LYRIC_SPACE_PATTERN.matcher(text.strip()).replaceAll(" ");
-    }
-
-    private String trimLyricDrawLine(String text) {
-        if (text == null) return "";
-        return text.strip();
-    }
-
-    private List<TextSegment> lyricTextSegments(String text, Typeface tf, float size) {
-        ArrayList<TextSegment> result = new ArrayList<>();
-        BreakIterator iterator = BreakIterator.getWordInstance(Locale.ROOT);
-        iterator.setText(text);
-        int start = iterator.first();
-        for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
-            String part = text.substring(start, end);
-            if (part.isEmpty()) continue;
-            appendLyricTextSegment(result, part, tf, size);
-        }
-        if (result.isEmpty()) result.add(new TextSegment(text, renderer.measureText(text, tf, size), text.isBlank()));
-        return result;
-    }
-
-    private void appendLyricTextSegment(List<TextSegment> result, String part, Typeface tf, float size) {
-        if (part.isBlank()) {
-            result.add(new TextSegment(part, renderer.measureText(part, tf, size), true));
-            return;
-        }
-        if (!containsCjk(part)) {
-            result.add(new TextSegment(part, renderer.measureText(part, tf, size), false));
-            return;
-        }
-        StringBuilder pending = new StringBuilder();
-        for (int offset = 0; offset < part.length();) {
-            int cp = part.codePointAt(offset);
-            int len = Character.charCount(cp);
-            String unit = part.substring(offset, offset + len);
-            if (isCjkCodePoint(cp)) {
-                if (!pending.isEmpty()) {
-                    String pendingText = pending.toString();
-                    result.add(new TextSegment(pendingText, renderer.measureText(pendingText, tf, size), false));
-                    pending.setLength(0);
-                }
-                result.add(new TextSegment(unit, renderer.measureText(unit, tf, size), false));
-            } else {
-                pending.append(unit);
-            }
-            offset += len;
-        }
-        if (!pending.isEmpty()) {
-            String pendingText = pending.toString();
-            result.add(new TextSegment(pendingText, renderer.measureText(pendingText, tf, size), false));
-        }
-    }
-
-    private List<Integer> balancedLyricBreaks(List<TextSegment> segments, float maxWidth) {
-        int n = segments.size();
-        ArrayList<Integer> result = new ArrayList<>();
-        if (n <= 1 || maxWidth <= 1f) return result;
-        double[] prefixWidth = new double[n + 1];
-        for (int i = 0; i < n; i++) prefixWidth[i + 1] = prefixWidth[i] + segments.get(i).width();
-        if (prefixWidth[n] <= maxWidth) return result;
-        double[] dp = new double[n + 1];
-        int[] nextBreak = new int[n + 1];
-        for (int i = 0; i <= n; i++) {
-            dp[i] = Double.POSITIVE_INFINITY;
-            nextBreak[i] = -1;
-        }
-        dp[n] = 0.0;
-        double cjkPenalty = Math.pow(maxWidth * LYRIC_CJK_BREAK_PENALTY_RATIO, 2.0);
-        double normalPenalty = Math.pow(maxWidth * LYRIC_NORMAL_BREAK_PENALTY_RATIO, 2.0);
-        for (int i = n - 1; i >= 0; i--) {
-            for (int j = i + 1; j <= n; j++) {
-                double lineW = prefixWidth[j] - prefixWidth[i];
-                double lineCost;
-                if (lineW > maxWidth) {
-                    if (j == i + 1) lineCost = Math.pow(lineW - maxWidth, 2.0) * LYRIC_OVERFLOW_PENALTY_MULTIPLIER;
-                    else continue;
-                } else {
-                    lineCost = Math.pow(maxWidth - lineW, 2.0);
-                }
-                double breakPenalty = 0.0;
-                if (j < n) {
-                    TextSegment prev = segments.get(j - 1);
-                    if (endsWithLyricPunctuation(prev.text())) breakPenalty = -Math.pow(maxWidth * LYRIC_PUNCTUATION_BREAK_REWARD_RATIO, 2.0);
-                    else if (prev.isSpace()) breakPenalty = -Math.pow(maxWidth * LYRIC_SPACE_BREAK_REWARD_RATIO, 2.0);
-                    else if (isCjkBreakBoundary(segments, j)) breakPenalty = cjkPenalty;
-                    else breakPenalty = normalPenalty;
-                }
-                double total = lineCost + breakPenalty + dp[j];
-                if (total < dp[i]) {
-                    dp[i] = total;
-                    nextBreak[i] = j;
-                }
-            }
-        }
-        int cur = 0;
-        while (cur < n) {
-            int next = nextBreak[cur];
-            if (next <= cur || next > n) break;
-            if (next < n) result.add(next);
-            cur = next;
-        }
-        return result;
-    }
-
-    private boolean endsWithLyricPunctuation(String text) {
-        if (text == null || text.isEmpty()) return false;
-        String stripped = text.stripTrailing();
-        if (stripped.isEmpty()) return false;
-        int cp = stripped.codePointBefore(stripped.length());
-        return LYRIC_BREAK_PUNCTUATION.indexOf(cp) >= 0;
-    }
-
-    private boolean isCjkBreakBoundary(List<TextSegment> segments, int index) {
-        if (index <= 0 || index >= segments.size()) return false;
-        return containsCjk(segments.get(index - 1).text()) || containsCjk(segments.get(index).text());
-    }
-
-    private boolean containsCjk(String text) {
-        if (text == null || text.isEmpty()) return false;
-        for (int offset = 0; offset < text.length();) {
-            int cp = text.codePointAt(offset);
-            if (isCjkCodePoint(cp)) return true;
-            offset += Character.charCount(cp);
-        }
-        return false;
-    }
-
-    private boolean isCjkCodePoint(int cp) {
-        return Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN || (cp >= 0x0800 && cp <= 0x9FFC);
     }
 
     private void clearLyricCache() {
@@ -1807,9 +1619,16 @@ public class Musicpage extends Screen {
             return new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.75f);
         }
 
-        float opacity = hasBuffered ? 0.85f : 0.2f;
+        float opacity = hasBuffered ? 0.85f : (amllNonDynamicLyrics ? 0.2f : 1f);
         float scale = (!groupActive && playing) ? 0.97f : 1f;
         return new LyricPresentation(opacity, scale);
+    }
+
+    private boolean isAMLLNonDynamicLyrics(List<LyricLine> lines) {
+        for (LyricLine line : lines) {
+            if (line.words() != null && line.words().size() > 1) return false;
+        }
+        return true;
     }
 
     private boolean isAMLLGroupActive(int groupIndex) {
@@ -2741,7 +2560,8 @@ public class Musicpage extends Screen {
                     if (mainWords.isEmpty()) {
                         mainWords.add(new LyricWord(actualMainStart, actualMainEnd, mainText));
                     }
-                    result.add(new LyricLine(actualMainStart, actualMainEnd, mainText, false, attachRomanWords(mainWords, romanWords), translation, romanText, isDuet));
+                    String lineRomanText = romanWords.isEmpty() ? romanText : null;
+                    result.add(new LyricLine(actualMainStart, actualMainEnd, mainText, false, attachRomanWords(mainWords, romanWords), translation, lineRomanText, isDuet));
                 }
 
                 float actualBgStart = lineBegin > 0f ? lineBegin : (bgWords.isEmpty() ? 0f : bgWords.get(0).startTime());
