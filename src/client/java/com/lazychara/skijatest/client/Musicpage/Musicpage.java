@@ -579,7 +579,8 @@ public class Musicpage extends Screen {
         layoutRightW = rightW;
         layoutLyricTop = lyricTop;
         layoutLyricH = lyricH;
-        layoutLyricAnchorY = coverY + coverSize * 0.5f;
+        float lyricAlignPosition = (coverY + coverSize * 0.5f) / Math.max(1f, height);
+        layoutLyricAnchorY = lyricTop + lyricH * lyricAlignPosition;
 
         float coverX = leftX + (leftW - coverSize) * 0.5f;
         renderControlThumb(leftX + leftW * 0.5f, coverY - amllHorizontalGap() - amllHorizontalThumbRowHeight() * 0.5f);
@@ -874,7 +875,7 @@ public class Musicpage extends Screen {
     private float getLineContentHeight(int index, int activeIndex, float s) {
         CachedLyricLine cached = index >= 0 && index < lyricCache.size() ? lyricCache.get(index) : null;
         if (cached == null) return 30f * s;
-        if (index == activeIndex) {
+        if (isActiveLine(index, activeIndex)) {
             return Math.max(1f, cached.activeH - cached.activePad * 2f);
         } else {
             return Math.max(1f, cached.inactiveH - cached.inactivePad * 2f);
@@ -883,18 +884,29 @@ public class Musicpage extends Screen {
 
     private boolean isAttachedBgLine(int index) {
         if (index <= 0 || index >= lyricLines.size()) return false;
-        LyricLine line = lyricLines.get(index);
-        LyricLine prev = lyricLines.get(index - 1);
-        return line.isBG() && !prev.isBG() && Math.abs(line.startTime() - prev.startTime()) < 0.001f;
+        return lyricLines.get(index).isBG();
     }
 
     private int attachedBgIndex(int mainIndex) {
         int bgIndex = mainIndex + 1;
-        return bgIndex < lyricLines.size() && isAttachedBgLine(bgIndex) ? bgIndex : -1;
+        return bgIndex < lyricLines.size() && isAttachedBgLine(bgIndex) && groupMainIndex(bgIndex) == mainIndex ? bgIndex : -1;
     }
 
     private int groupMainIndex(int index) {
-        return isAttachedBgLine(index) ? index - 1 : index;
+        if (index <= 0 || index >= lyricLines.size()) return index;
+        int mainIndex = index;
+        while (mainIndex > 0 && lyricLines.get(mainIndex).isBG()) mainIndex--;
+        return mainIndex;
+    }
+
+    private boolean isBackgroundFirst(int mainIndex, int bgIndex) {
+        if (mainIndex < 0 || mainIndex >= lyricLines.size() || bgIndex < 0 || bgIndex >= lyricLines.size()) return false;
+        return firstWordStartTime(lyricLines.get(bgIndex)) < firstWordStartTime(lyricLines.get(mainIndex));
+    }
+
+    private float firstWordStartTime(LyricLine line) {
+        if (line != null && line.words() != null && !line.words().isEmpty()) return line.words().get(0).startTime();
+        return line == null ? 0f : line.startTime();
     }
 
     private float getLyricGroupHeight(int index, int activeIndex, float s) {
@@ -903,7 +915,7 @@ public class Musicpage extends Screen {
         int bgIndex = attachedBgIndex(mainIndex);
         if (bgIndex < 0) return mainH;
         float bgH = getLineContentHeight(bgIndex, activeIndex, s);
-        boolean groupActive = isActiveLine(mainIndex, activeIndex) || isActiveLine(bgIndex, activeIndex);
+        boolean groupActive = isAMLLGroupActive(mainIndex) || (activeIndex >= 0 && groupMainIndex(activeIndex) == mainIndex);
         return mainH + (groupActive ? bgH : 0f);
     }
 
@@ -1360,10 +1372,21 @@ public class Musicpage extends Screen {
         float delay = 0f;
         float baseDelay = snap ? 0f : 0.05f;
 
+        int nextValidGroupAfterAnchor = -1;
+        if (interlude.active()) {
+            for (int j = interlude.anchor() + 1; j < lyricLines.size(); j++) {
+                if (!isAttachedBgLine(j)) {
+                    nextValidGroupAfterAnchor = j;
+                    break;
+                }
+            }
+            if (nextValidGroupAfterAnchor == -1) nextValidGroupAfterAnchor = lyricLines.size();
+        }
+
         for (int i = 0; i < lyricCache.size(); i++) {
             if (isAttachedBgLine(i)) continue;
 
-            boolean shouldShowDots = interlude.active() && i == interlude.anchor() + 1;
+            boolean shouldShowDots = interlude.active() && i == nextValidGroupAfterAnchor;
             if (!setDots && shouldShowDots) {
                 setDots = true;
                 curPos += dotMargin;
@@ -1373,21 +1396,36 @@ public class Musicpage extends Screen {
             }
 
             CachedLyricLine line = lyricCache.get(i);
-            LyricPresentation presentation = computeLyricPresentation(i, active);
-            float targetY = curPos;
-            boolean dynamicMask = isActiveLine(i, active) && line.lineRef != null && line.lineRef.isDynamic();
-            updateCachedLyricLine(line, targetY, presentation, params, safeDt, snap, computeAMLLGroupBlur(i), dynamicMask, false, delay);
-
             int bgIndex = attachedBgIndex(i);
-            float groupH = getLineContentHeight(i, active, s);
+            boolean groupActive = isAMLLGroupActive(i) || (active >= 0 && groupMainIndex(active) == i);
+            float groupTop = curPos;
+            float mainH = getLineContentHeight(i, active, s);
+            float mainTargetY = groupTop;
+            float bgH = 0f;
+            boolean bgFirst = false;
+            if (bgIndex >= 0) {
+                bgH = getLineContentHeight(bgIndex, active, s);
+                bgFirst = isBackgroundFirst(i, bgIndex);
+                if (groupActive && bgFirst) mainTargetY += bgH;
+            }
+            LyricPresentation presentation = computeLyricPresentation(i, active);
+            boolean dynamicMask = isActiveLine(i, active) && line.lineRef != null && line.lineRef.isDynamic();
+            updateCachedLyricLine(line, mainTargetY, presentation, params, safeDt, snap, computeAMLLGroupBlur(i), dynamicMask, false, delay);
+
+            float groupH = mainH;
             if (bgIndex >= 0) {
                 CachedLyricLine bgLine = lyricCache.get(bgIndex);
-                boolean groupActive = isActiveLine(i, active) || isActiveLine(bgIndex, active);
-                float bgH = getLineContentHeight(bgIndex, active, s);
-                float bgProgress = groupActive ? 1f : 0f;
-                float bgSlideY = -80f * (1f - bgProgress);
-                float bgTargetY = targetY + groupH + bgH * (bgSlideY / 100f);
-                LyricPresentation bgPresentation = new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.8f);
+                boolean playing = currentUiTrack != null && MusicLoader.isPlaying(currentUiTrack);
+                float hiddenSlideY = bgFirst ? 80f : -80f;
+                float bgSlideY = (groupActive || !playing) ? 0f : hiddenSlideY;
+                float activeProgress = 1f - Math.abs(bgSlideY) / 80f;
+                float bgTargetY;
+                if (bgFirst) {
+                    bgTargetY = groupActive ? groupTop + bgH * (bgSlideY / 100f) : mainTargetY - bgH * activeProgress;
+                } else {
+                    bgTargetY = groupTop + mainH + bgH * (bgSlideY / 100f);
+                }
+                LyricPresentation bgPresentation = computeLyricPresentation(bgIndex, active);
                 boolean bgDynamicMask = isActiveLine(bgIndex, active) && bgLine.lineRef != null && bgLine.lineRef.isDynamic();
                 updateCachedLyricLine(bgLine, bgTargetY, bgPresentation, params, safeDt, snap, computeAMLLGroupBlur(bgIndex), bgDynamicMask, true, delay);
                 if (groupActive) groupH += bgH;
@@ -1400,7 +1438,7 @@ public class Musicpage extends Screen {
             }
         }
 
-        if (interlude.active() && !setDots && interlude.anchor() == lyricCache.size() - 1) {
+        if (interlude.active() && !setDots && nextValidGroupAfterAnchor == lyricCache.size()) {
             curPos += dotMargin;
             dotTargetY = curPos;
         }
@@ -1501,8 +1539,8 @@ public class Musicpage extends Screen {
 
     private void updateAMLLMaskAlpha(CachedLyricLine line, float dt, boolean snap, boolean dynamicMask) {
         float factor = clamp01((line.currentScale - 0.97f) / 0.03f);
-        float dynamicDarkAlpha = factor * 0.2f + 0.2f;
-        float dynamicBrightAlpha = factor * 0.8f + 0.2f;
+        float dynamicDarkAlpha = factor * 0.25f + 0.25f;
+        float dynamicBrightAlpha = factor * 0.75f + 0.25f;
         line.targetBrightAlpha = dynamicMask ? dynamicBrightAlpha : dynamicDarkAlpha;
         line.targetDarkAlpha = dynamicDarkAlpha;
         if (snap) {
@@ -1523,16 +1561,16 @@ public class Musicpage extends Screen {
 
     private float groupEndTime(int mainIndex) {
         if (mainIndex < 0 || mainIndex >= lyricLines.size()) return 0f;
-        int bgIndex = attachedBgIndex(mainIndex);
         float end = lyricLines.get(mainIndex).endTime();
+        int bgIndex = attachedBgIndex(mainIndex);
         if (bgIndex >= 0) end = Math.max(end, lyricLines.get(bgIndex).endTime());
         return end;
     }
 
     private float groupStartTime(int mainIndex) {
         if (mainIndex < 0 || mainIndex >= lyricLines.size()) return 0f;
-        int bgIndex = attachedBgIndex(mainIndex);
         float start = lyricLines.get(mainIndex).startTime();
+        int bgIndex = attachedBgIndex(mainIndex);
         if (bgIndex >= 0) start = Math.min(start, lyricLines.get(bgIndex).startTime());
         return start;
     }
@@ -1625,7 +1663,7 @@ public class Musicpage extends Screen {
         boolean groupActive = isAMLLGroupActive(groupIndex);
 
         if (isBG) {
-            return new LyricPresentation(groupActive ? 0.4f : 0.0001f, groupActive ? 1f : 0.75f);
+            return new LyricPresentation(groupActive ? 1f : 0.0001f, groupActive ? 1f : 0.75f);
         }
 
         float opacity = hasBuffered ? 0.85f : (amllNonDynamicLyrics ? 0.2f : 1f);
@@ -1649,11 +1687,10 @@ public class Musicpage extends Screen {
 
 
     private boolean isActiveLine(int index, int active) {
-        if (index == active) return true;
-        if (active >= 0 && active < lyricLines.size() && index >= 0 && index < lyricLines.size()) {
-            return Math.abs(lyricLines.get(index).startTime() - lyricLines.get(active).startTime()) < 0.001f;
-        }
-        return false;
+        if (index < 0 || index >= lyricLines.size()) return false;
+        int groupIndex = groupMainIndex(index);
+        if (isAMLLGroupActive(groupIndex)) return true;
+        return active >= 0 && active < lyricLines.size() && groupIndex == groupMainIndex(active);
     }
 
     private void startLyricViewAnimation(long now) {
@@ -2386,6 +2423,31 @@ public class Musicpage extends Screen {
         words.set(index, new LyricWord(word.startTime(), word.endTime(), (word.word() == null ? "" : word.word()) + visible, word.romanWord(), word.ruby()));
     }
 
+    private String stripTTMLBackgroundStart(String text) {
+        if (text == null || text.isEmpty()) return "";
+        return text.replaceAll("^[(（]+", "").stripLeading();
+    }
+
+    private String stripTTMLBackgroundEnd(String text) {
+        if (text == null || text.isEmpty()) return "";
+        return text.replaceAll("[)）]+$", "").stripTrailing();
+    }
+
+    private String stripTTMLBackgroundText(String text) {
+        return stripTTMLBackgroundEnd(stripTTMLBackgroundStart(text)).trim();
+    }
+
+    private java.util.List<LyricWord> stripTTMLBackgroundWords(java.util.List<LyricWord> words) {
+        if (words == null || words.isEmpty()) return words;
+        ArrayList<LyricWord> result = new ArrayList<>(words);
+        LyricWord first = result.get(0);
+        result.set(0, new LyricWord(first.startTime(), first.endTime(), stripTTMLBackgroundStart(first.word()), first.romanWord(), first.ruby()));
+        int lastIndex = result.size() - 1;
+        LyricWord last = result.get(lastIndex);
+        result.set(lastIndex, new LyricWord(last.startTime(), last.endTime(), stripTTMLBackgroundEnd(last.word()), last.romanWord(), last.ruby()));
+        return result;
+    }
+
     private java.util.List<LyricWord> attachRomanWords(java.util.List<LyricWord> words, java.util.List<LyricWord> romanWords) {
         if (words == null || words.isEmpty() || romanWords == null || romanWords.isEmpty()) return words;
         ArrayList<LyricWord> result = new ArrayList<>(words.size());
@@ -2404,6 +2466,56 @@ public class Musicpage extends Screen {
             result.add(word.withRomanWord(best == null ? null : best.word()));
         }
         return result;
+    }
+
+    private LyricLine withLyricLineTiming(LyricLine line, float startTime, float endTime) {
+        return new LyricLine(startTime, endTime, line.text(), line.isBG(), line.words(), line.translation(), line.romanization(), line.isDuet());
+    }
+
+    private LyricLine withLyricLineBackground(LyricLine line, boolean isBG) {
+        return new LyricLine(line.startTime(), line.endTime(), line.text(), isBG, line.words(), line.translation(), line.romanization(), line.isDuet());
+    }
+
+    private void convertExcessiveBackgroundLines(List<LyricLine> lines) {
+        int consecutiveBgCount = 0;
+        for (int i = 0; i < lines.size(); i++) {
+            LyricLine line = lines.get(i);
+            if (line.isBG()) {
+                consecutiveBgCount++;
+                if (consecutiveBgCount > 1) {
+                    lines.set(i, withLyricLineBackground(line, false));
+                }
+            } else {
+                consecutiveBgCount = 0;
+            }
+        }
+    }
+
+    private void syncMainAndBackgroundLines(List<LyricLine> lines) {
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            LyricLine line = lines.get(i);
+            if (line.isBG()) continue;
+            if (i + 1 >= lines.size()) continue;
+            LyricLine nextLine = lines.get(i + 1);
+            if (!nextLine.isBG()) continue;
+            float[] range = new float[]{Float.MAX_VALUE, -Float.MAX_VALUE};
+            includeLyricWordTimingRange(line, range);
+            includeLyricWordTimingRange(nextLine, range);
+            if (range[0] == Float.MAX_VALUE) continue;
+            float finalStart = Math.min(Math.min(range[0], line.startTime()), nextLine.startTime());
+            float finalEnd = Math.max(Math.max(range[1], line.endTime()), nextLine.endTime());
+            lines.set(i, withLyricLineTiming(line, finalStart, finalEnd));
+            lines.set(i + 1, withLyricLineTiming(nextLine, finalStart, finalEnd));
+        }
+    }
+
+    private void includeLyricWordTimingRange(LyricLine line, float[] range) {
+        if (line.words() == null) return;
+        for (LyricWord word : line.words()) {
+            if (word.word() == null || word.word().trim().isEmpty()) continue;
+            range[0] = Math.min(range[0], word.startTime());
+            range[1] = Math.max(range[1], word.endTime());
+        }
     }
 
 
@@ -2458,6 +2570,7 @@ public class Musicpage extends Screen {
                 if (lineKey.isEmpty()) lineKey = pEl.getAttributeNS("http://itunes.apple.com/lyric-ttml-extensions", "key");
                 String agentId = pEl.getAttribute("ttm:agent");
                 if (agentId.isEmpty()) agentId = pEl.getAttributeNS("http://www.w3.org/ns/ttml#metadata", "agent");
+                if (agentId.isEmpty()) agentId = "v1";
 
                 String agentType = agentTypes.getOrDefault(agentId, "person");
                 boolean isDuet = false;
@@ -2576,12 +2689,13 @@ public class Musicpage extends Screen {
                 float actualBgStart = lineBegin > 0f ? lineBegin : (bgWords.isEmpty() ? 0f : bgWords.get(0).startTime());
                 float actualBgEnd = lineEnd > 0f ? lineEnd : (bgWords.isEmpty() ? 0f : bgWords.get(bgWords.size() - 1).endTime());
 
+                bgText = stripTTMLBackgroundText(bgText);
+                bgWords = stripTTMLBackgroundWords(bgWords);
+
                 if (!bgText.isEmpty() || !bgWords.isEmpty()) {
                     if (bgWords.isEmpty()) {
                         bgWords.add(new LyricWord(actualBgStart, actualBgEnd, bgText));
                     }
-                    bgText = bgText.replaceAll("^[（(]+|[)）]+$", "").trim();
-                    bgText = "（" + bgText + "）";
                     result.add(new LyricLine(actualBgStart, actualBgEnd, bgText, true, bgWords, null, isDuet));
                 }
             }
@@ -2595,7 +2709,7 @@ public class Musicpage extends Screen {
             result.add(new LyricLine(8f, 12f, "The loaded TTML has no valid lines", false));
         }
 
-        result.sort(java.util.Comparator.comparingDouble(LyricLine::startTime));
+        convertExcessiveBackgroundLines(result);
 
         for (int i = 0; i < result.size(); i++) {
             LyricLine curr = result.get(i);
@@ -2628,6 +2742,8 @@ public class Musicpage extends Screen {
             }
             result.set(i, new LyricLine(curr.startTime(), lineEnd, curr.text(), curr.isBG(), patchedWords, curr.translation(), curr.romanization(), curr.isDuet()));
         }
+
+        syncMainAndBackgroundLines(result);
 
         return result;
     }
@@ -2709,31 +2825,7 @@ public class Musicpage extends Screen {
         }
         result = merged;
 
-        int consecutiveBgCount = 0;
-        for (int i = 0; i < result.size(); i++) {
-            LyricLine line = result.get(i);
-            if (line.isBG()) {
-                consecutiveBgCount++;
-                if (consecutiveBgCount > 1) {
-                    result.set(i, new LyricLine(line.startTime(), line.endTime(), line.text(), false));
-                }
-            } else {
-                consecutiveBgCount = 0;
-            }
-        }
-
-        for (int i = result.size() - 1; i >= 0; i--) {
-            LyricLine line = result.get(i);
-            if (line.isBG()) continue;
-            if (i + 1 < result.size()) {
-                LyricLine nextLine = result.get(i + 1);
-                if (nextLine.isBG()) {
-                    float minStart = Math.min(line.startTime(), nextLine.startTime());
-                    result.set(i, new LyricLine(minStart, line.endTime(), line.text(), line.isBG()));
-                    result.set(i + 1, new LyricLine(minStart, nextLine.endTime(), nextLine.text(), nextLine.isBG()));
-                }
-            }
-        }
+        convertExcessiveBackgroundLines(result);
 
         for (int i = 0; i < result.size() - 1; i++) {
             LyricLine curr = result.get(i);
@@ -2752,6 +2844,7 @@ public class Musicpage extends Screen {
         }
 
         result.removeIf(line -> line.text().isBlank());
+        syncMainAndBackgroundLines(result);
 
         return result;
     }
@@ -2781,10 +2874,11 @@ public class Musicpage extends Screen {
 
         for (int i = 0; i < lyricLines.size(); i++) {
             if (isAttachedBgLine(i)) continue;
-            LyricLine line = lyricLines.get(i);
-            if (line.startTime() <= elapsed) {
+            float groupStart = groupStartTime(i);
+            float groupEnd = groupEndTime(i);
+            if (groupStart <= elapsed) {
                 maxStartedIndex = i;
-                if (line.endTime() > elapsed) {
+                if (groupEnd > elapsed) {
                     currentActiveGroups.add(i);
                 }
             }
@@ -3816,7 +3910,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllHorizontalThumbRowHeight() {
-        return height * 0.04f;
+        return amllControlThumbHeight() + height * 0.04f;
     }
 
     private float amllControlThumbWidth() {
@@ -4009,7 +4103,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricLinePaddingX(float fontSize) {
-        return amllViewportWidthPx() <= 500f ? amllCssPx(20f) : fontSize;
+        return amllViewportWidthPx() <= 500f ? amllCssPx(20f) : amllLyricFontSize();
     }
 
     private float amllLyricLinePaddingY(float fontSize) {
@@ -4029,7 +4123,7 @@ public class Musicpage extends Screen {
     }
 
     private float amllLyricSubLineOpacity() {
-        return 0.3f;
+        return 0.55f;
     }
 
     private float amllInterludeDotSize() {
